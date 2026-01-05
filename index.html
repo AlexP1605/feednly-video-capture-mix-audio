@@ -250,15 +250,20 @@
     let previewObjectURL = null;
 
     // --- AJOUT MUSIQUE (prévisualisation uniquement) : catalogue et configuration ---
-    const MUSIC_OPTIONS = [
-      { id: 'roar', title: 'Roar (demo)', artist: 'CC0', url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3' },
-      { id: 'beat', title: 'Sample beat', artist: 'CC0', url: 'https://upload.wikimedia.org/wikipedia/commons/4/45/Beats.ogg' }
+    const DEFAULT_MUSIC_OPTIONS = [
+      {
+        id: 'default',
+        title: 'Default music',
+        artist: 'Feednly',
+        url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3'
+      }
     ];
 
+    let musicOptions = [...DEFAULT_MUSIC_OPTIONS];
     let musicVolume = 0.7; // Volume musique (0 → 1)
     let musicStartTime = 0; // Décalage de départ musique en secondes
     let muteMic = false; // Couper l'audio micro d'origine dans le preview
-    let selectedMusicId = MUSIC_OPTIONS[0].id; // Musique par défaut dès la preview
+    let selectedMusicId = musicOptions[0].id; // Musique par défaut dès la preview
     
     let facingMode = 'environment';
     let recordedFacingMode = 'environment';
@@ -284,18 +289,50 @@
     let previewTimeout = null;
 
     // --- AJOUT MUSIQUE : initialisation UI simple ---
-    const getSelectedMusic = () => MUSIC_OPTIONS.find(m => m.id === selectedMusicId) || MUSIC_OPTIONS[0];
+    const getSelectedMusic = () => musicOptions.find(m => m.id === selectedMusicId) || musicOptions[0];
 
-    MUSIC_OPTIONS.forEach(opt => {
-        const o = document.createElement('option');
-        o.value = opt.id;
-        o.textContent = `${opt.title} – ${opt.artist}`;
-        musicSelect.appendChild(o);
-    });
-    musicSelect.value = selectedMusicId;
-    musicVolumeInput.value = musicVolume;
-    musicOffsetInput.value = musicStartTime;
-    muteMicInput.checked = muteMic;
+    function populateMusicOptions(options) {
+        musicSelect.innerHTML = '';
+        options.forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt.id;
+            o.textContent = `${opt.title} – ${opt.artist}`;
+            musicSelect.appendChild(o);
+        });
+
+        if (!selectedMusicId || !options.some(opt => opt.id === selectedMusicId)) {
+            selectedMusicId = options[0]?.id || '';
+        }
+        if (selectedMusicId) {
+            musicSelect.value = selectedMusicId;
+        }
+
+        musicVolumeInput.value = musicVolume;
+        musicOffsetInput.value = musicStartTime;
+        muteMicInput.checked = muteMic;
+    }
+
+    populateMusicOptions(musicOptions);
+
+    async function loadMusicCatalog() {
+        try {
+            const res = await fetch('music.json');
+            if (!res.ok) throw new Error('music catalog fetch failed');
+            const data = await res.json();
+            if (Array.isArray(data) && data.length) {
+                musicOptions = data;
+            } else {
+                musicOptions = [...DEFAULT_MUSIC_OPTIONS];
+            }
+        } catch (err) {
+            console.warn('Using default music catalog', err);
+            musicOptions = [...DEFAULT_MUSIC_OPTIONS];
+        }
+
+        populateMusicOptions(musicOptions);
+    }
+
+    loadMusicCatalog();
 
     function updatePreviewAudioFromUI() {
         musicVolume = parseFloat(musicVolumeInput.value || '0');
@@ -737,8 +774,10 @@
        previewVideo.currentTime = 0;
 
        // Sélection par défaut à chaque nouvelle preview
-        selectedMusicId = MUSIC_OPTIONS[0].id;
-        musicSelect.value = selectedMusicId;
+        selectedMusicId = musicOptions[0]?.id || '';
+        if (selectedMusicId) {
+            musicSelect.value = selectedMusicId;
+        }
         musicVolume = 0.7;
         musicStartTime = 0;
         muteMic = false;
