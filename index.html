@@ -998,6 +998,9 @@
         cameraPreview.srcObject = null;
         cameraPreview.srcObject = mediaStream;
 
+        // Garantir l'affichage du flux même si l'évènement metadata tarde
+        cameraPreview.style.opacity = "1";
+
         cameraPreview.play().catch(e=>{});
         
         cameraPreview.style.transform = (facingMode === 'user') ? "scaleX(-1)" : "scaleX(1)";
