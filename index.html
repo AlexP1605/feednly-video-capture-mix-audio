@@ -137,11 +137,11 @@
     .music-icon { width: 22px; height: 22px; fill: #fff; flex-shrink: 0; }
 
     #preview-mute-btn {
-      position: absolute; top: calc(env(safe-area-inset-top) + 8px); right: 14px;
-      width: 46px; height: 46px; border-radius: 14px; border: 1px solid var(--glass-border);
+      position: absolute; top: calc(env(safe-area-inset-top) + 2px); right: 14px;
+      width: 52px; height: 52px; border-radius: 16px; border: 1px solid var(--glass-border);
       background: var(--glass-bg); color: #fff; font-size: 20px; display: grid; place-items: center;
       cursor: pointer; z-index: 11; backdrop-filter: blur(14px); box-shadow: 0 14px 36px rgba(0,0,0,0.35);
-      transition: all 0.2s;
+      transition: all 0.2s; align-items: center;
     }
     #preview-mute-btn:active { transform: scale(0.95); }
     #preview-mute-btn svg { width: 22px; height: 22px; fill: currentColor; }
@@ -176,11 +176,6 @@
       display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; padding: 10px 12px; align-items: end;
       cursor: pointer; overflow: hidden; position: relative;
     }
-    .waveform-visual::after {
-      content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%);
-      animation: shimmer 2s ease-in-out infinite;
-      pointer-events: none; mix-blend-mode: screen;
-    }
     .waveform-visual span {
       display: block; width: 6px; align-self: end; border-radius: 6px 6px 2px 2px;
       background: linear-gradient(180deg, #7f7ff5, #5ecbfa);
@@ -198,7 +193,6 @@
     }
     .waveform-selection-window.hidden { display: none; }
     .slider-row { display: none; }
-    @keyframes shimmer { 0% { transform: translateX(-100%); } 50% { transform: translateX(100%); } 100% { transform: translateX(200%); } }
     .visually-hidden { position: absolute !important; height: 1px; width: 1px; overflow: hidden; clip: rect(1px, 1px, 1px, 1px); white-space: nowrap; }
     #preview-actions { height: 110px; min-height: 110px; background: #000; display: flex; align-items: center; justify-content: center; gap: 15px; padding: 0 24px; z-index: 60; pointer-events: auto; }
     .action-btn { flex: 1; height: 54px; font-size: 16px; font-weight: 700; border: none; cursor: pointer; border-radius: 14px; }
@@ -209,28 +203,36 @@
     #music-controls .title { text-align: left; }
     #volume-controls { gap: 20px; }
     #volume-controls .title { text-align: left; font-size: 17px; }
-    #volume-row { gap: 14px; }
-    #volume-row label { padding: 14px 14px 12px; border-radius: 16px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); }
+    #volume-row { gap: 16px; }
+    #volume-row label {
+      padding: 16px; border-radius: 18px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    #volume-row label .slider-meta { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 14px; letter-spacing: 0.2px; }
     #volume-controls label input[type="range"], #music-volume, #original-volume {
-      -webkit-appearance: none; appearance: none; width: 100%; height: 22px;
-      background: linear-gradient(90deg, rgba(255,255,255,0.18), rgba(255,255,255,0.1));
-      border-radius: 999px; outline: none; border: 1px solid rgba(255,255,255,0.18);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
-      padding: 0 6px;
+      -webkit-appearance: none; appearance: none; width: 100%; height: 28px;
+      background: linear-gradient(90deg, rgba(255,255,255,0.16), rgba(255,255,255,0.08));
+      border-radius: 999px; outline: none; border: 1px solid rgba(255,255,255,0.2);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 10px 30px rgba(0,0,0,0.35);
+      padding: 0 10px;
     }
     #volume-controls label input[type="range"]::-webkit-slider-thumb, #music-volume::-webkit-slider-thumb, #original-volume::-webkit-slider-thumb {
-      -webkit-appearance: none; appearance: none; width: 32px; height: 32px; border-radius: 50%;
-      background: linear-gradient(145deg, #ffffff, #b8e1ff); border: 1px solid rgba(0,0,0,0.2);
-      box-shadow: 0 8px 18px rgba(0,0,0,0.35);
+      -webkit-appearance: none; appearance: none; width: 36px; height: 36px; border-radius: 50%;
+      background: linear-gradient(145deg, #ffffff, #d5e8ff); border: 1px solid rgba(0,0,0,0.25);
+      box-shadow: 0 8px 18px rgba(0,0,0,0.45);
     }
     #volume-controls label input[type="range"]::-moz-range-thumb, #music-volume::-moz-range-thumb, #original-volume::-moz-range-thumb {
-      width: 32px; height: 32px; border-radius: 50%;
-      background: linear-gradient(145deg, #ffffff, #b8e1ff); border: 1px solid rgba(0,0,0,0.2);
-      box-shadow: 0 8px 18px rgba(0,0,0,0.35);
+      width: 36px; height: 36px; border-radius: 50%;
+      background: linear-gradient(145deg, #ffffff, #d5e8ff); border: 1px solid rgba(0,0,0,0.25);
+      box-shadow: 0 8px 18px rgba(0,0,0,0.45);
     }
     #volume-controls label input[type="range"]::-moz-range-track, #music-volume::-moz-range-track, #original-volume::-moz-range-track {
-      height: 22px; border-radius: 999px; background: linear-gradient(90deg, rgba(255,255,255,0.18), rgba(255,255,255,0.1));
-      border: 1px solid rgba(255,255,255,0.18);
+      height: 28px; border-radius: 999px; background: linear-gradient(90deg, rgba(255,255,255,0.16), rgba(255,255,255,0.08));
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    #volume-controls label input[type="range"]::-webkit-slider-runnable-track, #music-volume::-webkit-slider-runnable-track, #original-volume::-webkit-slider-runnable-track {
+      height: 28px; border-radius: 999px; background: linear-gradient(90deg, rgba(255,255,255,0.16), rgba(255,255,255,0.08));
+      border: 1px solid rgba(255,255,255,0.2);
     }
 
     /* --- UPLOAD --- */
@@ -342,14 +344,14 @@
             <span>Volume son</span>
           </div>
           <label>
-            <div style="display:flex; justify-content:space-between; width:100%; align-items:center; font-weight:700; font-size:13px;">
+            <div class="slider-meta">
               <span>Son original</span>
               <span id="original-volume-value">50</span>
             </div>
             <input id="original-volume" type="range" min="0" max="1" step="0.01" value="0.5" />
           </label>
           <label>
-            <div style="display:flex; justify-content:space-between; width:100%; align-items:center; font-weight:700; font-size:13px;">
+            <div class="slider-meta">
               <span>Musique</span>
               <span id="music-volume-value">50</span>
             </div>
