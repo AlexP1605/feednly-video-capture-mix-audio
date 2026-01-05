@@ -12,6 +12,7 @@
       --primary: #ff3b30;
       --active-timer: #ffcc00;
       --flash-active: #ffcc00;
+      --preview-audio-control-size: 52px;
     }
 
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-touch-callout: none; }
@@ -126,8 +127,8 @@
       border: 1px solid rgba(255,255,255,0.18);
       border-radius: 18px; color: #fff; font-size: 13px; backdrop-filter: blur(14px);
       cursor: pointer; box-shadow: 0 12px 28px rgba(0,0,0,0.35);
-      min-height: 52px;
-      height: 52px;
+      min-height: var(--preview-audio-control-size);
+      height: var(--preview-audio-control-size);
       max-width: 240px;
     }
     .music-overlay.hidden { display: none; }
@@ -152,7 +153,7 @@
 
     #preview-mute-btn {
       position: absolute; top: calc(env(safe-area-inset-top) + 2px); right: 14px;
-      width: 52px; height: 52px; border-radius: 100px; border: 1px solid var(--glass-border);
+      width: var(--preview-audio-control-size); height: var(--preview-audio-control-size); border-radius: 100px; border: 1px solid var(--glass-border);
       background: var(--glass-bg); color: #fff; font-size: 20px; display: grid; place-items: center;
       cursor: pointer; z-index: 11; backdrop-filter: blur(14px); box-shadow: 0 14px 36px rgba(0,0,0,0.35);
       transition: all 0.2s; align-items: center;
