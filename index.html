@@ -114,6 +114,10 @@
     #preview-overlay.active { display: flex; opacity: 1; }
     .preview-video-container { flex: 1; position: relative; overflow: hidden; border-bottom-left-radius: 24px; border-bottom-right-radius: 24px; background: #000; }
     #preview-video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+    #audio-controls { padding: 14px 18px 8px 18px; display: flex; flex-direction: column; gap: 10px; background: #0f0f0f; color: #fff; }
+    #audio-controls label { font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    #audio-controls select, #audio-controls input[type="number"], #audio-controls input[type="range"] { flex: 1; padding: 8px 10px; border-radius: 10px; border: 1px solid #333; background: #1c1c1e; color: #fff; }
+    #audio-controls .toggle-row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
     #preview-actions { height: 110px; min-height: 110px; background: #000; display: flex; align-items: center; justify-content: center; gap: 15px; padding: 0 24px; z-index: 60; pointer-events: auto; }
     .action-btn { flex: 1; height: 54px; font-size: 16px; font-weight: 700; border: none; cursor: pointer; border-radius: 14px; }
     #restart-button { background: #1c1c1e; color: #fff; border: 1px solid #333; }
@@ -183,6 +187,21 @@
 
   <div id="preview-overlay">
     <div class="preview-video-container"><video id="preview-video" playsinline webkit-playsinline loop></video></div>
+    <div id="audio-controls">
+      <label>Musique
+        <select id="music-select"></select>
+      </label>
+      <label>Volume musique
+        <input id="music-volume" type="range" min="0" max="1" step="0.05" value="0.7" />
+      </label>
+      <label>Début (secondes)
+        <input id="music-offset" type="number" min="0" step="0.5" value="0" />
+      </label>
+      <div class="toggle-row">
+        <span>Couper le micro original</span>
+        <input id="mute-mic" type="checkbox" />
+      </div>
+    </div>
     <div id="preview-actions">
       <button type="button" id="restart-button" class="action-btn">Recommencer</button>
       <button type="button" id="next-button" class="action-btn">Suivant</button>
@@ -213,6 +232,10 @@
     const progressCircle = document.getElementById('record-progress-circle');
     const errorToast = document.getElementById('error-toast');
     const recordingCanvas = document.getElementById('recording-canvas');
+    const musicSelect = document.getElementById('music-select');
+    const musicVolumeInput = document.getElementById('music-volume');
+    const musicOffsetInput = document.getElementById('music-offset');
+    const muteMicInput = document.getElementById('mute-mic');
 
     cameraPreview.onloadedmetadata = () => {
       cameraPreview.style.objectFit = "cover";
@@ -225,6 +248,17 @@
     let isRecording = false;
     let recordedBlob = null;
     let previewObjectURL = null;
+
+    // --- AJOUT MUSIQUE (prévisualisation uniquement) : catalogue et configuration ---
+    const MUSIC_OPTIONS = [
+      { id: 'roar', title: 'Roar (demo)', artist: 'CC0', url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3' },
+      { id: 'beat', title: 'Sample beat', artist: 'CC0', url: 'https://upload.wikimedia.org/wikipedia/commons/4/45/Beats.ogg' }
+    ];
+
+    let musicVolume = 0.7; // Volume musique (0 → 1)
+    let musicStartTime = 0; // Décalage de départ musique en secondes
+    let muteMic = false; // Couper l'audio micro d'origine dans le preview
+    let selectedMusicId = MUSIC_OPTIONS[0].id; // Musique par défaut dès la preview
     
     let facingMode = 'environment';
     let recordedFacingMode = 'environment';
@@ -248,12 +282,51 @@
     let recordingStartTime = 0;
     let progressInterval = null;
     let previewTimeout = null;
+
+    // --- AJOUT MUSIQUE : initialisation UI simple ---
+    const getSelectedMusic = () => MUSIC_OPTIONS.find(m => m.id === selectedMusicId) || MUSIC_OPTIONS[0];
+
+    MUSIC_OPTIONS.forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt.id;
+        o.textContent = `${opt.title} – ${opt.artist}`;
+        musicSelect.appendChild(o);
+    });
+    musicSelect.value = selectedMusicId;
+    musicVolumeInput.value = musicVolume;
+    musicOffsetInput.value = musicStartTime;
+    muteMicInput.checked = muteMic;
+
+    function updatePreviewAudioFromUI() {
+        musicVolume = parseFloat(musicVolumeInput.value || '0');
+        musicStartTime = parseFloat(musicOffsetInput.value || '0');
+        muteMic = !!muteMicInput.checked;
+        if (musicSelect.value) selectedMusicId = musicSelect.value;
+        if (previewOverlay.classList.contains('active')) {
+            previewVideo.currentTime = 0;
+            previewVideo.play().catch(()=>{});
+            stopPreviewAudioGraph();
+            buildPreviewAudioGraph();
+        }
+    }
+
+    musicSelect.onchange = updatePreviewAudioFromUI;
+    musicVolumeInput.oninput = updatePreviewAudioFromUI;
+    musicOffsetInput.onchange = updatePreviewAudioFromUI;
+    muteMicInput.onchange = updatePreviewAudioFromUI;
     
     progressCircle.style.strokeDasharray = `${circumference} ${circumference}`;
     progressCircle.style.strokeDashoffset = circumference;
 
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     let audioCtx = new AudioContext();
+
+    // --- AJOUT MUSIQUE : buffers & noeuds partagés ---
+    const musicBufferCache = new Map();
+    let previewMusicSource = null;
+    let previewMusicGain = null;
+    let previewMicGain = null;
+    let previewMediaSource = null;
 
     // --- Optimisation Fluidité (Gérer la visibilité de la page) ---
     document.addEventListener('visibilitychange', () => {
@@ -289,6 +362,77 @@
        osc.stop(now + duration);
        setTimeout(() => { osc.disconnect(); gain.disconnect(); }, 1000);
     }
+
+    async function ensureAudioReady() {
+        if (!audioCtx) audioCtx = new AudioContext();
+        if (audioCtx.state === 'suspended') {
+            try { await audioCtx.resume(); } catch(e){}
+        }
+    }
+
+    // --- AJOUT MUSIQUE : charge ou réutilise le buffer depuis l'URL choisie ---
+    async function loadMusicBuffer(url) {
+        if (!url) return null;
+        if (musicBufferCache.has(url)) return musicBufferCache.get(url);
+        await ensureAudioReady();
+        try {
+            const res = await fetch(url);
+            const arrayBuffer = await res.arrayBuffer();
+            const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+            musicBufferCache.set(url, decoded);
+            return decoded;
+        } catch (e) {
+            console.warn('Musique introuvable, fallback micro seul.', e);
+            musicBufferCache.set(url, null);
+            return null;
+        }
+    }
+
+    function stopPreviewAudioGraph() {
+        [previewMusicSource].forEach(node => { try { node.stop(); } catch(_){} });
+        if (previewMediaSource && previewMediaSource.disconnect) previewMediaSource.disconnect();
+        [previewMusicSource, previewMusicGain, previewMicGain].forEach(node => { if (node && node.disconnect) node.disconnect(); });
+        previewMusicSource = null;
+        previewMusicGain = null;
+        previewMicGain = null;
+    }
+
+    async function buildPreviewAudioGraph() {
+        if (!previewVideo || !recordedBlob) return;
+        await ensureAudioReady();
+        stopPreviewAudioGraph();
+
+        if (!previewMediaSource) {
+            previewMediaSource = audioCtx.createMediaElementSource(previewVideo);
+        }
+
+        previewVideo.muted = true; // on diffuse via Web Audio uniquement
+
+        previewMicGain = audioCtx.createGain();
+        previewMicGain.gain.value = muteMic ? 0 : 1;
+        previewMediaSource.connect(previewMicGain);
+        previewMicGain.connect(audioCtx.destination);
+
+        const currentMusic = getSelectedMusic();
+        const buffer = await loadMusicBuffer(currentMusic?.url);
+        if (!buffer) {
+            console.warn('Musique non chargée, preview sans musique');
+            return;
+        }
+        if (buffer) {
+            previewMusicGain = audioCtx.createGain();
+            previewMusicGain.gain.value = musicVolume;
+            previewMusicSource = audioCtx.createBufferSource();
+            previewMusicSource.buffer = buffer;
+            previewMusicSource.loop = true;
+            previewMusicSource.connect(previewMusicGain);
+            previewMusicGain.connect(audioCtx.destination);
+            const offset = buffer.duration ? (musicStartTime % buffer.duration) : musicStartTime;
+            const startAt = audioCtx.currentTime + 0.05;
+            try { previewMusicSource.start(startAt, Math.max(0, offset)); } catch(e) { previewMusicSource.start(); }
+        }
+    }
+
 
     function showError(msg) {
         errorToast.textContent = msg;
@@ -399,10 +543,10 @@
       try {
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         mediaStream = stream;
-        
+
         cameraPreview.srcObject = null;
         cameraPreview.srcObject = mediaStream;
-        
+
         cameraPreview.play().catch(e=>{});
         
         cameraPreview.style.transform = (facingMode === 'user') ? "scaleX(-1)" : "scaleX(1)";
@@ -516,8 +660,9 @@
              await startCamera();
         }
       }
-      
-      if (isRecording || !mediaStream || mediaStream.getAudioTracks().length === 0) {
+
+      const hasAudioTrack = mediaStream && mediaStream.getAudioTracks().length > 0;
+      if (isRecording || !mediaStream || !hasAudioTrack) {
           showError("Impossible de démarrer l'enregistrement (Micro indisponible).");
           return;
       }
@@ -588,18 +733,35 @@
        if (previewObjectURL) URL.revokeObjectURL(previewObjectURL);
        previewObjectURL = URL.createObjectURL(blob);
        previewVideo.src = previewObjectURL;
+       previewVideo.muted = true; // son routé via Web Audio uniquement
+       previewVideo.currentTime = 0;
+
+       // Sélection par défaut à chaque nouvelle preview
+        selectedMusicId = MUSIC_OPTIONS[0].id;
+        musicSelect.value = selectedMusicId;
+        musicVolume = 0.7;
+        musicStartTime = 0;
+        muteMic = false;
+        musicVolumeInput.value = musicVolume;
+        musicOffsetInput.value = musicStartTime;
+        muteMicInput.checked = muteMic;
 
        previewVideo.style.transform = "scaleX(1)";
-       
+
        previewOverlay.classList.add('active');
        document.body.classList.add('showing-preview');
-       previewVideo.play().catch(()=>{});
+       previewVideo.play().then(() => buildPreviewAudioGraph()).catch(() => buildPreviewAudioGraph());
     }
 
     function resetPreviewState() {
        if (previewTimeout) {
            clearTimeout(previewTimeout);
            previewTimeout = null;
+       }
+       stopPreviewAudioGraph();
+       if (previewMediaSource) {
+           try { previewMediaSource.disconnect(); } catch(e){}
+           previewMediaSource = null;
        }
        previewVideo.pause();
        previewVideo.src = '';
@@ -628,6 +790,9 @@
                 hidePreview();
             }
             shouldCheckDuration = false;
+        }
+        if (previewOverlay.classList.contains('active')) {
+            buildPreviewAudioGraph();
         }
     };
 
@@ -707,17 +872,20 @@
     };
     // --- FIN CORRECTION CLÉ ---
 
-    nextBtn.onclick = () => {
+    nextBtn.onclick = async () => {
        // Couper immédiatement la preview pour éviter le son pendant l'upload
        previewVideo.pause();
        previewVideo.currentTime = 0;
+       stopPreviewAudioGraph();
 
        const url = getUploadURL();
        uploadOverlay.classList.add('active');
-       uploadText.textContent = "0%";
+       uploadText.textContent = "Préparation...";
        if(!url || !recordedBlob) {
           uploadText.textContent = "Erreur"; setTimeout(()=>uploadOverlay.classList.remove('active'), 2000); return;
        }
+       uploadText.textContent = "0%";
+
        const xhr = new XMLHttpRequest();
        xhr.open('PUT', url, true);
        xhr.setRequestHeader('Content-Type', recordedBlob.type);
