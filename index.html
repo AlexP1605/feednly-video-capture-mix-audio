@@ -117,38 +117,45 @@
     #preview-video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 
     .music-overlay {
-      position: absolute; top: 12px; left: 12px; right: 12px; z-index: 10;
-      display: flex; align-items: center; gap: 10px; padding: 10px 14px;
-      background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 14px; color: #fff; font-size: 14px; backdrop-filter: blur(10px);
-      cursor: pointer; box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      position: absolute; left: 12px; right: 12px; bottom: 18px; z-index: 10;
+      display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+      background: linear-gradient(135deg, rgba(10,10,10,0.82), rgba(20,20,20,0.82));
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 16px; color: #fff; font-size: 14px; backdrop-filter: blur(12px);
+      cursor: pointer; box-shadow: 0 20px 50px rgba(0,0,0,0.35);
     }
     .music-overlay.hidden { display: none; }
     .music-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-    .music-title { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .music-artist { font-size: 12px; color: #cfcfcf; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .music-remove { margin-left: auto; width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); display: grid; place-items: center; font-size: 16px; background: rgba(0,0,0,0.3); }
+    .music-title { font-weight: 800; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.2px; }
+    .music-artist { font-size: 12px; color: #cfcfcf; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.85; }
+    .music-remove { margin-left: auto; width: 32px; height: 32px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.18); display: grid; place-items: center; font-size: 16px; background: rgba(255,255,255,0.06); }
 
     #preview-mute-btn {
       position: absolute; top: 50%; right: 12px; transform: translateY(-50%);
-      width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3);
-      background: rgba(0,0,0,0.4); color: #fff; font-size: 20px; display: grid; place-items: center;
-      cursor: pointer; z-index: 10; backdrop-filter: blur(10px);
+      width: 48px; height: 48px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.22);
+      background: rgba(0,0,0,0.42); color: #fff; font-size: 20px; display: grid; place-items: center;
+      cursor: pointer; z-index: 10; backdrop-filter: blur(12px); box-shadow: 0 12px 30px rgba(0,0,0,0.35);
     }
+    #preview-mute-btn svg { width: 22px; height: 22px; fill: currentColor; }
 
-    #audio-controls { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: rgba(12,12,12,0.95); color: #fff; border-top-left-radius: 20px; border-top-right-radius: 20px; transform: translateY(110%); transition: transform 0.25s ease; z-index: 80; }
+    #audio-controls { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 16px 26px; display: flex; flex-direction: column; gap: 14px; background: rgba(10,10,10,0.96); color: #fff; border-top-left-radius: 26px; border-top-right-radius: 26px; transform: translateY(110%); transition: transform 0.25s ease; z-index: 80; box-shadow: 0 -18px 40px rgba(0,0,0,0.55); }
     #audio-controls.active { transform: translateY(0); }
-    #audio-controls .sheet-handle { width: 60px; height: 5px; border-radius: 10px; background: #2a2a2a; align-self: center; }
+    #audio-controls .sheet-handle { width: 70px; height: 6px; border-radius: 10px; background: #2f2f2f; align-self: center; margin-bottom: 4px; }
+    #audio-controls header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    #audio-controls .title { font-size: 16px; font-weight: 800; letter-spacing: 0.3px; }
     #audio-controls label { font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    #audio-controls input[type="search"] { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid #333; background: #1c1c1e; color: #fff; font-size: 14px; }
-    #audio-controls select, #audio-controls input[type="number"], #audio-controls input[type="range"] { flex: 1; padding: 8px 10px; border-radius: 10px; border: 1px solid #333; background: #1c1c1e; color: #fff; }
-    #audio-controls .toggle-row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+    #audio-controls input[type="search"] { width: 100%; padding: 12px 14px; border-radius: 14px; border: 1px solid #2b2b2d; background: #131316; color: #fff; font-size: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); }
+    #audio-controls select, #audio-controls input[type="range"] { flex: 1; padding: 8px 10px; border-radius: 12px; border: 1px solid #2b2b2d; background: #151519; color: #fff; }
+    #audio-controls .toggle-row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; background: rgba(255,255,255,0.04); padding: 12px; border-radius: 14px; border: 1px solid #1f1f24; }
     #music-list { max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 8px; margin: 6px 0 4px; }
-    .music-item { padding: 10px 12px; border-radius: 12px; border: 1px solid #1f1f1f; background: #141414; display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
+    .music-item { padding: 12px 12px; border-radius: 14px; border: 1px solid #1f1f1f; background: linear-gradient(145deg, #121216, #0e0e10); display: flex; flex-direction: column; gap: 2px; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); }
     .music-item.active { border-color: #fff; background: #1f1f1f; }
     .music-item .title { font-weight: 700; font-size: 14px; }
     .music-item .artist { font-size: 12px; color: #b5b5b5; }
-    #sheet-close { align-self: flex-end; background: #1f1f1f; color: #fff; border: 1px solid #333; border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+    #sheet-close { align-self: flex-end; background: #1c1c20; color: #fff; border: 1px solid #2c2c31; border-radius: 12px; padding: 10px 14px; cursor: pointer; box-shadow: 0 10px 20px rgba(0,0,0,0.3); }
+    .timeline-row { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 16px; border: 1px solid #1d1d22; background: rgba(255,255,255,0.03); }
+    .timeline-row .timeline-header { display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: 13px; color: #e5e5e7; }
+    .timeline-row .time-chip { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 6px 10px; font-size: 12px; letter-spacing: 0.2px; }
     #preview-actions { height: 110px; min-height: 110px; background: #000; display: flex; align-items: center; justify-content: center; gap: 15px; padding: 0 24px; z-index: 60; pointer-events: auto; }
     .action-btn { flex: 1; height: 54px; font-size: 16px; font-weight: 700; border: none; cursor: pointer; border-radius: 14px; }
     #restart-button { background: #1c1c1e; color: #fff; border: 1px solid #333; }
@@ -230,19 +237,26 @@
     </div>
     <div id="audio-controls">
       <div class="sheet-handle"></div>
+      <header>
+        <div class="title">Musique &amp; son</div>
+        <button type="button" id="sheet-close">Fermer</button>
+      </header>
       <input id="music-search" type="search" placeholder="Rechercher un titre ou un artiste" />
       <div id="music-list"></div>
+      <div class="timeline-row">
+        <div class="timeline-header">
+          <span>Choisir le passage</span>
+          <span class="time-chip" id="music-position-label">0:00</span>
+        </div>
+        <input id="music-seek" type="range" min="0" max="30" step="0.5" value="0" />
+      </div>
       <label>Volume musique
         <input id="music-volume" type="range" min="0" max="1" step="0.05" value="0.7" />
-      </label>
-      <label>Début (secondes)
-        <input id="music-offset" type="number" min="0" step="0.5" value="0" />
       </label>
       <div class="toggle-row">
         <span>Couper le micro original</span>
         <input id="mute-mic" type="checkbox" />
       </div>
-      <button type="button" id="sheet-close">Fermer</button>
     </div>
     <div id="preview-actions">
       <button type="button" id="restart-button" class="action-btn">Recommencer</button>
@@ -282,7 +296,8 @@
     const musicSearchInput = document.getElementById('music-search');
     const musicListEl = document.getElementById('music-list');
     const musicVolumeInput = document.getElementById('music-volume');
-    const musicOffsetInput = document.getElementById('music-offset');
+    const musicSeekInput = document.getElementById('music-seek');
+    const musicPositionLabel = document.getElementById('music-position-label');
     const muteMicInput = document.getElementById('mute-mic');
     const musicSheet = document.getElementById('audio-controls');
     const sheetCloseBtn = document.getElementById('sheet-close');
@@ -315,6 +330,7 @@
     let muteMic = false; // Couper l'audio micro d'origine dans le preview
     let previewMuted = false; // Bouton muet général
     let selectedMusicId = null; // Musique choisie pour la preview
+    let currentMusicDuration = 30; // Durée connue pour le slider (s)
     
     let facingMode = 'environment';
     let recordedFacingMode = 'environment';
@@ -352,7 +368,26 @@
     };
 
     function updateMuteButtonUI() {
-        previewMuteBtn.textContent = previewMuted ? '🔇' : '🔊';
+        const speakerOn = `<svg viewBox="0 0 256 256"><path d="M152 40a8 8 0 0 0-13.66-5.66L92.69 80H48a16 16 0 0 0-16 16v64a16 16 0 0 0 16 16h44.69l45.65 45.65A8 8 0 0 0 152 216Zm-16 155.31L95.31 155.63A8 8 0 0 0 89.66 154H48a0 0 0 0 1 0 0V98a0 0 0 0 1 0 0h41.66a8 8 0 0 0 5.65-2.34L136 60.69Z"/><path d="M187.31 68.69A8 8 0 0 0 176 80v96a8 8 0 0 0 11.31 11.31 72 72 0 0 0 0-101.62Z"/></svg>`;
+        const speakerMuted = `<svg viewBox="0 0 256 256"><path d="M229.66 26.34a8 8 0 0 0-11.32 0L176 68.69 139.32 32l-.06-.06a8 8 0 0 0-13.58 5.65V80H88a8 8 0 0 0-5.66 2.34L50.34 114.34 26.34 90.34a8 8 0 0 0-11.32 11.32l208 208a8 8 0 0 0 11.32-11.32L186 192.69 229.66 149a8 8 0 0 0 0-11.31L202.62 110l27.04-27a8 8 0 0 0 0-11.31ZM128 196.69 98.34 167H56a8 8 0 0 1-8-8v-56a8 8 0 0 1 8-8h42.34l29.66-29.66Zm32-48V107.31L174.69 122Z"/></svg>`;
+        previewMuteBtn.innerHTML = previewMuted ? speakerMuted : speakerOn;
+    }
+
+    function formatTimeLabel(seconds) {
+        const total = Math.max(0, Math.floor(seconds));
+        const m = Math.floor(total / 60).toString();
+        const s = (total % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+    }
+
+    function setSeekLimits(durationSeconds) {
+        currentMusicDuration = Math.max(5, durationSeconds || 30);
+        musicSeekInput.max = currentMusicDuration;
+        if (musicStartTime > currentMusicDuration) {
+            musicStartTime = 0;
+            musicSeekInput.value = 0;
+        }
+        musicPositionLabel.textContent = `${formatTimeLabel(musicStartTime)} / ${formatTimeLabel(currentMusicDuration)}`;
     }
 
     function renderMusicList(filter = '') {
@@ -388,10 +423,18 @@
                 selectedMusicId = opt.id;
                 updateMusicOverlay();
                 renderMusicList(musicSearchInput.value);
+                updateSeekDurationFromMeta(opt);
                 restartPreviewAudio();
             };
             musicListEl.appendChild(item);
         });
+    }
+
+    function updateSeekDurationFromMeta(opt) {
+        const durationMs = Number(opt?.duration);
+        if (!Number.isNaN(durationMs) && durationMs > 0) {
+            setSeekLimits(Math.max(5, Math.floor(durationMs / 1000)));
+        }
     }
 
     function updateMusicOverlay() {
@@ -419,8 +462,9 @@
         previewMuted = false;
         musicSearchInput.value = '';
         musicVolumeInput.value = musicVolume;
-        musicOffsetInput.value = musicStartTime;
+        musicSeekInput.value = musicStartTime;
         muteMicInput.checked = muteMic;
+        setSeekLimits(currentMusicDuration);
         updateMuteButtonUI();
         updateMusicOverlay();
         renderMusicList(musicSearchInput.value);
@@ -443,6 +487,7 @@
 
         renderMusicList(musicSearchInput.value);
         updateMusicOverlay();
+        updateSeekDurationFromMeta(getSelectedMusic());
         if (previewOverlay.classList.contains('active')) {
             restartPreviewAudio();
         }
@@ -452,9 +497,10 @@
 
     function restartPreviewAudio() {
         const volumeVal = parseFloat(musicVolumeInput.value || '0');
-        const offsetVal = parseFloat(musicOffsetInput.value || '0');
+        const offsetVal = parseFloat(musicSeekInput.value || '0');
         musicVolume = Number.isNaN(volumeVal) ? 0 : volumeVal;
         musicStartTime = Number.isNaN(offsetVal) ? 0 : Math.max(0, offsetVal);
+        musicPositionLabel.textContent = `${formatTimeLabel(musicStartTime)} / ${formatTimeLabel(currentMusicDuration)}`;
         muteMic = !!muteMicInput.checked;
         if (previewOverlay.classList.contains('active')) {
             previewVideo.currentTime = 0;
@@ -465,7 +511,7 @@
     }
 
     musicVolumeInput.oninput = restartPreviewAudio;
-    musicOffsetInput.onchange = restartPreviewAudio;
+    musicSeekInput.oninput = restartPreviewAudio;
     muteMicInput.onchange = restartPreviewAudio;
 
     function openMusicSheet() {
@@ -503,6 +549,29 @@
     musicSearchInput.oninput = (e) => renderMusicList(e.target.value);
     musicSheet.onclick = (e) => e.stopPropagation();
     sheetCloseBtn.onclick = (e) => { e.stopPropagation(); closeMusicSheet(); };
+
+    document.addEventListener('click', (e) => {
+        if (!musicSheet.classList.contains('active')) return;
+        const isInsideSheet = e.target.closest('#audio-controls');
+        const isOverlayButton = e.target.closest('.music-overlay');
+        if (!isInsideSheet && !isOverlayButton) {
+            closeMusicSheet();
+        }
+    });
+
+    let sheetTouchStartY = null;
+    musicSheet.addEventListener('touchstart', (e) => {
+        sheetTouchStartY = e.touches[0]?.clientY ?? null;
+    }, { passive: true });
+
+    musicSheet.addEventListener('touchend', (e) => {
+        if (sheetTouchStartY === null) return;
+        const endY = e.changedTouches[0]?.clientY ?? 0;
+        if (endY - sheetTouchStartY > 60) {
+            closeMusicSheet();
+        }
+        sheetTouchStartY = null;
+    });
     
     progressCircle.style.strokeDasharray = `${circumference} ${circumference}`;
     progressCircle.style.strokeDashoffset = circumference;
@@ -617,6 +686,7 @@
             console.warn('Musique non chargée, preview sans musique');
             return;
         }
+        setSeekLimits(buffer.duration || currentMusicDuration);
         if (buffer) {
             previewMusicGain = audioCtx.createGain();
             previewMusicGain.gain.value = musicVolume;
@@ -1093,7 +1163,13 @@
     };
     
     previewOverlay.onclick = (e) => {
-      if(!e.target.closest('.action-btn') && !e.target.closest('#preview-actions')) {
+      const tappedAction = e.target.closest('.action-btn') || e.target.closest('#preview-actions');
+      const tappedSheet = e.target.closest('#audio-controls');
+      if (musicSheet.classList.contains('active') && !tappedSheet) {
+         closeMusicSheet();
+         return;
+      }
+      if(!tappedAction) {
          previewVideo.paused ? previewVideo.play() : previewVideo.pause();
       }
     };
