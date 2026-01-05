@@ -680,6 +680,7 @@
 
     async function selectMusic(opt) {
         if (!opt) return;
+        try { audioCtx.resume(); } catch(_) {}
         selectedMusicId = opt.id;
         updateMusicOverlay();
         updateSeekDurationFromMeta(opt);
@@ -788,9 +789,8 @@
             }
             if (forceAutoplay || previewVideo.paused) {
                 await previewVideo.play().catch(()=>{});
-            } else {
-                refreshPreviewAudioWhilePlaying();
             }
+            await refreshPreviewAudioWhilePlaying();
         }
     }
 
@@ -859,6 +859,31 @@
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     let audioCtx = new AudioContext();
 
+    let audioUnlocked = false;
+
+    function unlockAudioNow() {
+        if (audioUnlocked) return;
+        audioUnlocked = true;
+
+        try { audioCtx.resume(); } catch(_) {}
+
+        try {
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            g.gain.value = 0.00001;
+            osc.connect(g);
+            g.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.01);
+        } catch(_) {}
+
+        document.removeEventListener('touchstart', unlockAudioNow);
+        document.removeEventListener('pointerdown', unlockAudioNow);
+    }
+
+    document.addEventListener('touchstart', unlockAudioNow, { passive: true });
+    document.addEventListener('pointerdown', unlockAudioNow, { passive: true });
+
     // --- AJOUT MUSIQUE : buffers & noeuds partagés ---
     const musicBufferCache = new Map();
     let previewMusicSource = null;
@@ -866,6 +891,9 @@
     let previewMicGain = null;
     let previewMasterGain = null;
     let previewMediaSource = null;
+    let syncTimer = null;
+    let previewMusicStartAt = 0;
+    let previewMusicOffset = 0;
 
     // --- Optimisation Fluidité (Gérer la visibilité de la page) ---
     document.addEventListener('visibilitychange', () => {
@@ -875,6 +903,11 @@
                     mediaStream.getTracks().forEach(track => track.stop());
                     mediaStream = null;
                 }
+            }
+            if (previewOverlay.classList.contains('active')) {
+                previewVideo.pause();
+                stopSyncLoop();
+                stopPreviewAudioGraph();
             }
         } else {
             if (!mediaStream && !isRecording && !isCountingDown) {
@@ -978,7 +1011,39 @@
         const offsetBase = musicStartTime + videoPos;
         const offset = buffer.duration ? (offsetBase % buffer.duration) : offsetBase;
         const startAt = audioCtx.currentTime + 0.005;
-        try { previewMusicSource.start(startAt, Math.max(0, offset)); } catch(e) { previewMusicSource.start(); }
+        let actualStartAt = startAt;
+        let actualOffset = Math.max(0, offset);
+
+        try {
+            previewMusicSource.start(startAt, actualOffset);
+        } catch (e) {
+            actualStartAt = audioCtx.currentTime;
+            actualOffset = 0;
+            try { previewMusicSource.start(); } catch(_) {}
+        }
+
+        previewMusicStartAt = actualStartAt;
+        previewMusicOffset = actualOffset;
+    }
+
+    function startSyncLoop() {
+        stopSyncLoop();
+        syncTimer = setInterval(() => {
+            if (!previewOverlay.classList.contains('active')) return;
+            if (previewVideo.paused || !previewMusicSource) return;
+
+            const expected = musicStartTime + (Number(previewVideo?.currentTime) || 0);
+            const actual = (audioCtx.currentTime - previewMusicStartAt) + previewMusicOffset;
+
+            if (Math.abs(expected - actual) > 0.15) {
+                refreshPreviewAudioWhilePlaying();
+            }
+        }, 250);
+    }
+
+    function stopSyncLoop() {
+        if (syncTimer) clearInterval(syncTimer);
+        syncTimer = null;
     }
 
     async function buildPreviewAudioGraph() {
@@ -1338,6 +1403,7 @@
     function hidePreview() {
        previewOverlay.classList.remove('active');
        document.body.classList.remove('showing-preview');
+       stopSyncLoop();
        resetPreviewState();
 
        if (!mediaStream || !mediaStream.active) {
@@ -1363,10 +1429,12 @@
         await preloadSelectedMusic();
         buildPreviewAudioGraph();
         await refreshPreviewAudioWhilePlaying();
+        startSyncLoop();
     });
 
     previewVideo.addEventListener('pause', () => {
         stopPreviewAudioGraph();
+        stopSyncLoop();
     });
 
     flashBtn.onclick = toggleFlash;
