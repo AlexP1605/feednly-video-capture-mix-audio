@@ -203,6 +203,33 @@
       transition: left 0.15s ease, width 0.15s ease;
     }
     .waveform-selection-window.hidden { display: none; }
+    .slider-row {
+      display: flex; align-items: center; gap: 12px; margin-top: 6px;
+    }
+    .slider-row .time-chip { flex-shrink: 0; min-width: 70px; text-align: center; }
+    .music-seek-slider {
+      -webkit-appearance: none; appearance: none; width: 100%; height: 18px;
+      background: linear-gradient(90deg, rgba(255,255,255,0.2), rgba(255,255,255,0.08));
+      border-radius: 999px; border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+    }
+    .music-seek-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none; width: 28px; height: 28px; border-radius: 50%;
+      background: linear-gradient(145deg, #ffffff, #b8e1ff);
+      border: 1px solid rgba(0,0,0,0.15);
+      box-shadow: 0 8px 18px rgba(0,0,0,0.35);
+    }
+    .music-seek-slider::-moz-range-thumb {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: linear-gradient(145deg, #ffffff, #b8e1ff);
+      border: 1px solid rgba(0,0,0,0.15);
+      box-shadow: 0 8px 18px rgba(0,0,0,0.35);
+    }
+    .music-seek-slider::-moz-range-track {
+      height: 18px; border-radius: 999px;
+      background: linear-gradient(90deg, rgba(255,255,255,0.2), rgba(255,255,255,0.08));
+      border: 1px solid rgba(255,255,255,0.1);
+    }
     @keyframes shimmer { 0% { transform: translateX(-100%); } 50% { transform: translateX(100%); } 100% { transform: translateX(200%); } }
     .visually-hidden { position: absolute !important; height: 1px; width: 1px; overflow: hidden; clip: rect(1px, 1px, 1px, 1px); white-space: nowrap; }
     #preview-actions { height: 110px; min-height: 110px; background: #000; display: flex; align-items: center; justify-content: center; gap: 15px; padding: 0 24px; z-index: 60; pointer-events: auto; }
@@ -304,7 +331,7 @@
         <div id="music-overlay" class="music-overlay hidden">
           <div class="music-visual">
             <div class="music-icon-circle">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c.55 0 1 .45 1 1v5.6l5.5-1.4a1 1 0 0 1 1.25.97V10a1 1 0 0 1-.78.97L13 12.51v3.24a3.25 3.25 0 1 1-2-.03V6.12l-2.9.72A1 1 0 0 1 7 5.87V5a1 1 0 0 1 .76-.97L11.53 3h.47Z"></path></svg>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 3a1 1 0 0 1 1 1v9.2a4.8 4.8 0 1 1-2-3.84V7.12l-7 1.75V16.2a4.8 4.8 0 1 1-2-3.84V6a1 1 0 0 1 .74-.97l9-2.25A1 1 0 0 1 18 3Z"></path></svg>
             </div>
           </div>
           <div class="music-meta">
@@ -332,7 +359,10 @@
           <div id="waveform-visual" class="waveform-visual" role="presentation">
             <div id="waveform-selection-window" class="waveform-selection-window hidden"></div>
           </div>
-          <input id="music-seek" type="range" min="0" max="30" step="0.5" value="0" class="visually-hidden" />
+          <div class="slider-row">
+            <span class="time-chip">Décalage</span>
+            <input id="music-seek" type="range" min="0" max="30" step="0.25" value="0" class="music-seek-slider" />
+          </div>
         </div>
       </div>
       <div id="volume-controls" class="sheet">
@@ -510,19 +540,17 @@
 
     function updatePositionLabel() {
         const videoDuration = getVideoDuration();
-        const segmentEnd = videoDuration ? Math.min(currentMusicDuration, musicStartTime + videoDuration) : musicStartTime;
-        musicPositionLabel.textContent = videoDuration
-            ? `${formatTimeLabel(musicStartTime)} - ${formatTimeLabel(segmentEnd)} / ${formatTimeLabel(currentMusicDuration)}`
-            : `${formatTimeLabel(musicStartTime)} / ${formatTimeLabel(currentMusicDuration)}`;
+        const playbackSpan = videoDuration || currentMusicDuration;
+        const segmentEnd = musicStartTime + playbackSpan;
+        const displayTotal = Math.max(currentMusicDuration, playbackSpan);
+        musicPositionLabel.textContent = `${formatTimeLabel(musicStartTime)} - ${formatTimeLabel(segmentEnd)} / ${formatTimeLabel(displayTotal)}`;
     }
 
     function setSeekLimits(durationSeconds) {
         currentMusicDuration = Math.max(5, durationSeconds || 30);
-        const videoDuration = getVideoDuration();
-        const availableSpan = Math.max(0, currentMusicDuration - videoDuration);
-        const sliderMax = videoDuration ? availableSpan : currentMusicDuration;
-        musicSeekInput.max = Math.max(sliderMax, 0);
-        if (musicStartTime > sliderMax) {
+        musicSeekInput.max = currentMusicDuration;
+        musicSeekInput.step = 0.1;
+        if (musicStartTime > currentMusicDuration) {
             musicStartTime = 0;
             musicSeekInput.value = 0;
         }
@@ -549,8 +577,9 @@
         const bars = Array.from(waveformVisual.children);
         if (!bars.length) return;
         const videoDuration = getVideoDuration();
+        const playbackSpan = videoDuration || currentMusicDuration;
         const startRatio = currentMusicDuration ? Math.min(1, musicStartTime / currentMusicDuration) : 0;
-        const spanRatio = currentMusicDuration ? Math.min(1, (videoDuration || 0) / currentMusicDuration) : 0;
+        const spanRatio = currentMusicDuration ? Math.min(1, playbackSpan / currentMusicDuration) : 0;
         const endRatio = Math.min(1, startRatio + spanRatio);
         bars.forEach((bar, idx) => {
             const centerRatio = (idx + 0.5) / bars.length;
@@ -565,9 +594,10 @@
     function updateWaveformSelection() {
         if (!waveformSelectionWindow) return;
         const videoDuration = getVideoDuration();
-        const spanRatio = currentMusicDuration ? Math.min(1, videoDuration / currentMusicDuration) : 0;
+        const playbackSpan = videoDuration || currentMusicDuration;
+        const spanRatio = currentMusicDuration ? Math.min(1, playbackSpan / currentMusicDuration) : 0;
         const startRatio = currentMusicDuration ? Math.min(1, musicStartTime / currentMusicDuration) : 0;
-        waveformSelectionWindow.classList.toggle('hidden', !videoDuration || !currentMusicDuration);
+        waveformSelectionWindow.classList.toggle('hidden', !playbackSpan || !currentMusicDuration);
         waveformSelectionWindow.style.width = `${spanRatio * 100}%`;
         waveformSelectionWindow.style.left = `${startRatio * 100}%`;
     }
@@ -669,7 +699,10 @@
         }
         musicOverlayTitle.textContent = music.title;
         musicOverlayArtist.textContent = music.artist;
-        musicOverlayDuration.textContent = music.duration ? formatTimeLabel(Math.floor(Number(music.duration) / 1000)) : '';
+        const trackDurationSeconds = music.duration ? Math.floor(Number(music.duration) / 1000) : 0;
+        const videoDuration = getVideoDuration();
+        const overlayDuration = videoDuration || trackDurationSeconds || currentMusicDuration;
+        musicOverlayDuration.textContent = formatTimeLabel(Math.floor(overlayDuration));
         musicOverlay.classList.remove('hidden');
         buildWaveformBars();
     }
@@ -1288,6 +1321,7 @@
             shouldCheckDuration = false;
         }
         setSeekLimits(currentMusicDuration);
+        updateMusicOverlay();
         if (previewOverlay.classList.contains('active')) {
             buildPreviewAudioGraph();
         }
