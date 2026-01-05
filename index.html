@@ -1,0 +1,751 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Camera Pro V42 (Double Nettoyage d'État)</title>
+  <style>
+    :root {
+      --glass-bg: rgba(20, 20, 20, 0.65);
+      --glass-border: rgba(255, 255, 255, 0.2);
+      --primary: #ff3b30;
+      --active-timer: #ffcc00;
+      --flash-active: #ffcc00;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-touch-callout: none; }
+
+    html { width: 100%; height: 100%; background: #000; overflow: hidden; }
+
+    body {
+      margin: 0; width: 100%; height: 100dvh; background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden;
+    }
+
+    /* --- CAMERA --- */
+    #camera-container { position: absolute; inset: 0; z-index: 1; background: #000; }
+
+    #camera-preview {
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    }
+
+    video {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+      transform: scaleX(1); pointer-events: none;
+    }
+    video::-webkit-media-controls { display: none !important; }
+
+    /* --- COUNTDOWN --- */
+    #countdown-display {
+      position: fixed; inset: 0; z-index: 40;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 180px; font-weight: 800; color: #fff;
+      text-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      pointer-events: none;
+      opacity: 0; transform: scale(0.5);
+      transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    #countdown-display.active { opacity: 1; transform: scale(1); }
+
+    /* --- CONTROLS --- */
+    .controls { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
+    
+    .top-bar { 
+      position: absolute; top: 0; width: 100%; 
+      padding-top: max(20px, env(safe-area-inset-top));
+      height: 80px;
+      display: flex; justify-content: center; align-items: center; 
+      pointer-events: auto;
+    }
+    
+    .bottom-bar { 
+      position: absolute; bottom: 0; width: 100%; 
+      padding: 0 30px calc(20px + env(safe-area-inset-bottom)) 30px; 
+      display: flex; align-items: center; justify-content: space-between; 
+      z-index: 30;
+    }
+
+    body.recording .top-bar, body.recording .bottom-bar .side { opacity: 0; pointer-events: none; }
+
+    .side { pointer-events: auto; }
+    
+    .btn {
+      width: 48px; height: 48px; border-radius: 50%;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; backdrop-filter: blur(10px);
+      color: #fff; font-weight: 600; font-size: 14px;
+      transition: all 0.2s;
+    }
+    .btn:active { transform: scale(0.9); }
+    
+    .btn.flash-on { border-color: var(--flash-active); }
+    .btn.flash-on svg { fill: var(--flash-active); }
+    
+    #timer-btn { position: absolute; right: 20px; width: auto; padding: 0 14px; border-radius: 24px; gap: 6px; }
+    #timer-btn.active { background: rgba(255, 204, 0, 0.3); border-color: var(--active-timer); color: var(--active-timer); }
+    #timer-btn svg { width: 20px; height: 20px; fill: currentColor; }
+
+    .btn.disabled { opacity: 0.5; } 
+    .btn svg { width: 24px; height: 24px; fill: white; transition: fill 0.2s; }
+
+    /* --- RECORD BUTTON (ZONE AGRANDIE) --- */
+    .record-wrap { 
+      position: relative; width: 90px; height: 90px; 
+      display: flex; align-items: center; justify-content: center; 
+      pointer-events: auto; cursor: pointer; 
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    .record-progress { position: absolute; inset: -3px; width: 96px; height: 96px; transform: rotate(-90deg); pointer-events: none; }
+    .record-progress circle { fill: none; stroke: var(--primary); stroke-width: 5px; stroke-linecap: round; stroke-dasharray: 0 999; transition: stroke-dashoffset 0.1s linear; }
+    
+    .record-button { width: 72px; height: 72px; border-radius: 50%; background: #fff; border: 4px solid rgba(255,255,255,0.4); display: flex; align-items: center; justify-content: center; transition: all 0.2s; pointer-events: none; }
+    
+    body.recording .record-button { background: var(--primary); transform: scale(1.15); border-color: rgba(255,255,255,0.6); animation: pulse 1.5s infinite; }
+    body.recording .record-inner { width: 35%; height: 35%; background: #fff; border-radius: 6px; }
+    .record-inner { width: 100%; height: 100%; border-radius: 50%; transition: all 0.2s; }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.5); } 70% { box-shadow: 0 0 0 15px rgba(255, 59, 48, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); } }
+
+    /* --- PREVIEW UI --- */
+    #preview-overlay { position: fixed; inset: 0; z-index: 50; background: #000; display: none; opacity: 0; flex-direction: column; transition: opacity 0.2s ease; }
+    #preview-overlay.active { display: flex; opacity: 1; }
+    .preview-video-container { flex: 1; position: relative; overflow: hidden; border-bottom-left-radius: 24px; border-bottom-right-radius: 24px; background: #000; }
+    #preview-video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+    #preview-actions { height: 110px; min-height: 110px; background: #000; display: flex; align-items: center; justify-content: center; gap: 15px; padding: 0 24px; z-index: 60; pointer-events: auto; }
+    .action-btn { flex: 1; height: 54px; font-size: 16px; font-weight: 700; border: none; cursor: pointer; border-radius: 14px; }
+    #restart-button { background: #1c1c1e; color: #fff; border: 1px solid #333; }
+    #next-button { background: #fff; color: #000; }
+
+    /* --- UPLOAD --- */
+    #upload-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: opacity 0.2s; }
+    #upload-overlay.active { opacity: 1; visibility: visible; }
+    .spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.2); border-top: 4px solid #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #upload-text { margin-top: 20px; color: #fff; font-weight: 600; font-size: 18px; }
+
+    /* --- ERROR TOAST --- */
+    #error-toast {
+      position: fixed; top: 100px; left: 50%; transform: translateX(-50%) translateY(-20px);
+      background: rgba(255, 59, 48, 0.9); border: 1px solid rgba(255,255,255,0.2);
+      color: white; padding: 12px 24px; border-radius: 30px;
+      font-weight: 600; font-size: 14px; z-index: 200;
+      opacity: 0; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      pointer-events: none; text-align: center; width: 90%; max-width: 300px;
+    }
+    #error-toast.active { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    input[type="file"] { display: none; }
+    body.showing-preview .controls { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <div id="countdown-display"></div>
+  <div id="error-toast">Erreur</div>
+
+  <div id="camera-container">
+    <video id="camera-preview" playsinline muted autoplay></video>
+    <canvas id="recording-canvas" style="display:none;"></canvas>
+    
+    <div class="controls">
+      <div class="top-bar">
+        <button type="button" class="btn" id="flash-btn">
+          <svg viewBox="0 0 24 24"><path id="flash-icon-path" d="M3.27 3L2 4.27l5 5V13h3v9l3.58-6.14L17.73 20 19 18.73 3.27 3zM17 10h-4l4-8H7v2.18l8.46 8.46L17 10z"></path></svg>
+        </button>
+
+        <button type="button" class="btn" id="timer-btn">
+          <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"></path></svg>
+          <span id="timer-text">OFF</span>
+        </button>
+      </div>
+
+      <div class="bottom-bar">
+        <div class="side">
+          <button type="button" class="btn" id="gallery-btn">
+             <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"></path></svg>
+          </button>
+        </div>
+        <div class="record-wrap" id="record-wrap-btn">
+          <svg class="record-progress" viewBox="0 0 100 100"><circle id="record-progress-circle" cx="50" cy="50" r="46"></circle></svg>
+          <div class="record-button" id="record-btn"><div class="record-inner"></div></div>
+        </div>
+        <div class="side">
+          <button type="button" class="btn" id="switch-btn">
+             <svg viewBox="0 0 24 24"><path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"></path></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="preview-overlay">
+    <div class="preview-video-container"><video id="preview-video" playsinline webkit-playsinline loop></video></div>
+    <div id="preview-actions">
+      <button type="button" id="restart-button" class="action-btn">Recommencer</button>
+      <button type="button" id="next-button" class="action-btn">Suivant</button>
+    </div>
+  </div>
+
+  <div id="upload-overlay"><div class="spinner"></div><div id="upload-text">Préparation...</div></div>
+  <input type="file" id="camera-input" accept="video/*" capture="environment" />
+  <input type="file" id="galleryInput" accept="video/*" />
+
+  <script>
+    const cameraPreview = document.getElementById('camera-preview');
+    const previewVideo = document.getElementById('preview-video');
+    const previewOverlay = document.getElementById('preview-overlay');
+    const recordWrapBtn = document.getElementById('record-wrap-btn');
+    const flashBtn = document.getElementById('flash-btn');
+    const flashIconPath = document.getElementById('flash-icon-path');
+    const switchBtn = document.getElementById('switch-btn');
+    const timerBtn = document.getElementById('timer-btn');
+    const timerText = document.getElementById('timer-text');
+    const countdownDisplay = document.getElementById('countdown-display');
+    const galleryBtn = document.getElementById('gallery-btn');
+    const restartBtn = document.getElementById('restart-button');
+    const nextBtn = document.getElementById('next-button');
+    const galleryInput = document.getElementById('galleryInput');
+    const uploadOverlay = document.getElementById('upload-overlay');
+    const uploadText = document.getElementById('upload-text');
+    const progressCircle = document.getElementById('record-progress-circle');
+    const errorToast = document.getElementById('error-toast');
+    const recordingCanvas = document.getElementById('recording-canvas');
+
+    cameraPreview.onloadedmetadata = () => {
+      cameraPreview.style.objectFit = "cover";
+      cameraPreview.style.opacity = "1"; // garantir affichage plein écran
+    };
+
+    let mediaStream = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let isRecording = false;
+    let recordedBlob = null;
+    let previewObjectURL = null;
+    
+    let facingMode = 'environment';
+    let recordedFacingMode = 'environment';
+    let torchSupported = false;
+    let torchEnabled = false;
+    let uploadURL = '';
+
+    let timerDuration = 0;
+    let isCountingDown = false;
+    let shouldCheckDuration = false;
+    let isToggleLocked = false;
+    let isSwitching = false;
+    let recordingStream = null;
+    let stopCanvasDrawing = null;
+
+    const PATH_FLASH_ON = "M7 2v11h3v9l7-12h-4l4-8z";
+    const PATH_FLASH_OFF = "M3.27 3L2 4.27l5 5V13h3v9l3.58-6.14L17.73 20 19 18.73 3.27 3zM17 10h-4l4-8H7v2.18l8.46 8.46L17 10z";
+
+    const MAX_DURATION = 60000;
+    const circumference = 2 * Math.PI * 46;
+    let recordingStartTime = 0;
+    let progressInterval = null;
+    let previewTimeout = null;
+    
+    progressCircle.style.strokeDasharray = `${circumference} ${circumference}`;
+    progressCircle.style.strokeDashoffset = circumference;
+
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = new AudioContext();
+
+    // --- Optimisation Fluidité (Gérer la visibilité de la page) ---
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            if (!isRecording && !isCountingDown) {
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(track => track.stop());
+                    mediaStream = null;
+                }
+            }
+        } else {
+            if (!mediaStream && !isRecording && !isCountingDown) {
+                startCamera();
+            }
+        }
+    });
+
+    function playBeep(freq = 800, type = 'short') {
+       if (!audioCtx) return;
+       if (audioCtx.state === 'suspended') {
+           audioCtx.resume().catch(e => console.log(e));
+       }
+       const osc = audioCtx.createOscillator();
+       const gain = audioCtx.createGain();
+       osc.connect(gain);
+       gain.connect(audioCtx.destination);
+       osc.type = 'sine';
+       osc.frequency.value = freq;
+       gain.gain.value = 0.5; 
+       const now = audioCtx.currentTime;
+       osc.start(now);
+       const duration = (type === 'long') ? 0.6 : 0.1;
+       osc.stop(now + duration);
+       setTimeout(() => { osc.disconnect(); gain.disconnect(); }, 1000);
+    }
+
+    function showError(msg) {
+        errorToast.textContent = msg;
+        errorToast.classList.add('active');
+        setTimeout(() => { errorToast.classList.remove('active'); }, 4000);
+    }
+
+    function notifyHost(payload) {
+      try {
+        const msg = JSON.stringify(payload);
+        if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(msg);
+        else if (window.parent) window.parent.postMessage(msg, '*');
+      } catch (e) {}
+    }
+
+    function getUploadURL() {
+      const p = new URLSearchParams(window.location.search);
+      let u = uploadURL || p.get('upload_url') || p.get('url');
+      if(!u) try { u = new URLSearchParams(window.frameElement?.src?.split('?')[1]).get('upload_url'); } catch(e){}
+      return u;
+    }
+
+    function updateFlashUI() {
+      const isBack = facingMode === 'environment';
+      if (!isBack) {
+         flashBtn.classList.add('disabled');
+         flashBtn.classList.remove('flash-on');
+         flashIconPath.setAttribute('d', PATH_FLASH_OFF);
+         return;
+      } 
+      flashBtn.classList.remove('disabled');
+      if (torchEnabled) {
+         flashBtn.classList.add('flash-on');
+         flashIconPath.setAttribute('d', PATH_FLASH_ON);
+      } else {
+         flashBtn.classList.remove('flash-on');
+         flashIconPath.setAttribute('d', PATH_FLASH_OFF);
+      }
+    }
+
+    async function toggleFlash() {
+      if (!mediaStream || facingMode !== 'environment') return;
+      const track = mediaStream.getVideoTracks()[0];
+      torchEnabled = !torchEnabled;
+      try { await track.applyConstraints({ advanced: [{ torch: torchEnabled }] }); } 
+      catch (err) { }
+      updateFlashUI();
+    }
+
+    timerBtn.onclick = () => {
+      if (isRecording || isCountingDown) return;
+      if (timerDuration === 0) timerDuration = 5;
+      else if (timerDuration === 5) timerDuration = 10;
+      else timerDuration = 0;
+
+      if (timerDuration === 0) {
+        timerText.textContent = "OFF";
+        timerBtn.classList.remove('active');
+      } else {
+        timerText.textContent = timerDuration + "s";
+        timerBtn.classList.add('active');
+      }
+    };
+
+    function startCountdownAndRecord() {
+      if (isCountingDown) return;
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
+
+      isCountingDown = true;
+      let count = timerDuration;
+      document.querySelector('.controls').style.opacity = '0.5';
+      countdownDisplay.textContent = count;
+      countdownDisplay.classList.add('active');
+      
+      playBeep(1000, 'short');
+
+      const interval = setInterval(() => {
+        count--;
+        
+        if (count > 1) { 
+          countdownDisplay.textContent = count;
+          playBeep(1000, 'short');
+        } else if (count === 1) {
+          countdownDisplay.textContent = count;
+          playBeep(1500, 'long'); 
+        } else {
+          clearInterval(interval);
+          countdownDisplay.classList.remove('active');
+          document.querySelector('.controls').style.opacity = '1';
+          isCountingDown = false;
+          startRecording();
+        }
+      }, 1000);
+    }
+
+    async function startCamera() {
+      if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+      
+      const constraints = {
+        audio: true,
+        video: { 
+            facingMode: facingMode,
+            width: { ideal: 1920, max: 1920 },
+            height: { ideal: 1080, max: 1080 }
+        }
+      };
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        mediaStream = stream;
+        
+        cameraPreview.srcObject = null;
+        cameraPreview.srcObject = mediaStream;
+        
+        cameraPreview.play().catch(e=>{});
+        
+        cameraPreview.style.transform = (facingMode === 'user') ? "scaleX(-1)" : "scaleX(1)";
+
+        torchEnabled = false;
+        updateFlashUI();
+        
+        setTimeout(() => {
+           const track = mediaStream.getVideoTracks()[0];
+           const caps = track.getCapabilities ? track.getCapabilities() : {};
+           torchSupported = !!caps.torch;
+           updateFlashUI();
+        }, 300);
+
+      } catch (error) { console.error(error); }
+    }
+
+    function getRecordingStream() {
+      if (!recordingCanvas) return mediaStream;
+
+      if (recordingStream) {
+        recordingStream.getTracks().forEach(t => t.stop());
+      }
+      if (stopCanvasDrawing) {
+        stopCanvasDrawing();
+        stopCanvasDrawing = null;
+      }
+
+      const ctx = recordingCanvas.getContext('2d');
+      const updateCanvasSize = () => {
+        if (cameraPreview.videoWidth && cameraPreview.videoHeight) {
+          if (recordingCanvas.width !== cameraPreview.videoWidth || recordingCanvas.height !== cameraPreview.videoHeight) {
+            recordingCanvas.width = cameraPreview.videoWidth;
+            recordingCanvas.height = cameraPreview.videoHeight;
+          }
+        }
+      };
+
+      let drawing = true;
+      const drawFrame = () => {
+        if (!drawing) return;
+        updateCanvasSize();
+        if (!recordingCanvas.width || !recordingCanvas.height) {
+          requestAnimationFrame(drawFrame);
+          return;
+        }
+        ctx.save();
+        ctx.clearRect(0, 0, recordingCanvas.width, recordingCanvas.height);
+        if (facingMode === 'user') {
+          ctx.translate(recordingCanvas.width, 0);
+          ctx.scale(-1, 1);
+        }
+        ctx.drawImage(cameraPreview, 0, 0, recordingCanvas.width, recordingCanvas.height);
+        ctx.restore();
+        requestAnimationFrame(drawFrame);
+      };
+
+      drawFrame();
+
+      stopCanvasDrawing = () => { drawing = false; };
+
+      recordingStream = recordingCanvas.captureStream(30);
+      if (mediaStream) {
+        mediaStream.getAudioTracks().forEach(track => recordingStream.addTrack(track));
+      }
+      return recordingStream;
+    }
+    
+    async function addAudioTrack(currentStream) {
+        if (!navigator.mediaDevices || !currentStream) return false;
+        try {
+            const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            const audioTrack = audioStream.getAudioTracks()[0];
+            currentStream.addTrack(audioTrack);
+            return true;
+        } catch (error) {
+            console.error("Erreur lors de l'ajout du micro:", error);
+            return false;
+        }
+    }
+    
+    // --- LOGIQUE BOUTON ROBUSTE ---
+    recordWrapBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (isToggleLocked) return;
+      isToggleLocked = true;
+      setTimeout(() => { isToggleLocked = false; }, 300);
+
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
+
+      if (isRecording) {
+        stopRecording();
+      } else {
+        if (timerDuration > 0) startCountdownAndRecord();
+        else startRecording();
+      }
+    };
+
+    async function startRecording() {
+      const audioMissing = !mediaStream || mediaStream.getAudioTracks().length === 0;
+
+      if (audioMissing) {
+        const videoExists = mediaStream && mediaStream.getVideoTracks().length > 0;
+        
+        if (videoExists) {
+            const added = await addAudioTrack(mediaStream);
+            if (!added) {
+                await startCamera();
+            }
+        } else {
+             await startCamera();
+        }
+      }
+      
+      if (isRecording || !mediaStream || mediaStream.getAudioTracks().length === 0) {
+          showError("Impossible de démarrer l'enregistrement (Micro indisponible).");
+          return;
+      }
+      
+      recordedFacingMode = facingMode; 
+      recordedChunks = [];
+      
+      let options = {
+         mimeType: 'video/mp4',
+         videoBitsPerSecond: 2500000 
+      };
+      
+      if (!MediaRecorder.isTypeSupported('video/mp4')) {
+          options = { videoBitsPerSecond: 2500000 };
+      }
+
+      const streamForRecording = getRecordingStream();
+
+      try { mediaRecorder = new MediaRecorder(streamForRecording, options); }
+      catch(e) { mediaRecorder = new MediaRecorder(streamForRecording); }
+
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+      mediaRecorder.onstop = () => {
+         recordedBlob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
+         isRecording = false;
+         finalizeRecording();
+      };
+      
+      mediaRecorder.start();
+      isRecording = true;
+      document.body.classList.add('recording');
+      
+      recordingStartTime = Date.now();
+      progressCircle.style.strokeDashoffset = circumference;
+      
+      const tick = () => {
+         if (!isRecording) return;
+         const p = Math.min((Date.now() - recordingStartTime) / MAX_DURATION, 1);
+         progressCircle.style.strokeDashoffset = circumference * (1 - p);
+         if (p < 1) progressInterval = requestAnimationFrame(tick);
+         else stopRecording();
+      };
+      progressInterval = requestAnimationFrame(tick);
+    }
+
+    function stopRecording() {
+       if (mediaRecorder && mediaRecorder.state === 'recording') {
+           mediaRecorder.stop();
+       } else if (isRecording) {
+           isRecording = false;
+           finalizeRecording();
+       }
+    }
+
+    function finalizeRecording() {
+       if(progressInterval) cancelAnimationFrame(progressInterval);
+       document.body.classList.remove('recording');
+       progressCircle.style.strokeDashoffset = circumference;
+       if (torchEnabled) toggleFlash();
+       if (stopCanvasDrawing) { stopCanvasDrawing(); stopCanvasDrawing = null; }
+       if (recordingStream) { recordingStream.getTracks().forEach(t => t.stop()); recordingStream = null; }
+       shouldCheckDuration = false;
+       if (previewTimeout) clearTimeout(previewTimeout);
+       previewTimeout = setTimeout(() => { if(recordedBlob) showPreview(recordedBlob); }, 100);
+    }
+
+    function showPreview(blob) {
+       if (previewObjectURL) URL.revokeObjectURL(previewObjectURL);
+       previewObjectURL = URL.createObjectURL(blob);
+       previewVideo.src = previewObjectURL;
+
+       previewVideo.style.transform = "scaleX(1)";
+       
+       previewOverlay.classList.add('active');
+       document.body.classList.add('showing-preview');
+       previewVideo.play().catch(()=>{});
+    }
+
+    function resetPreviewState() {
+       if (previewTimeout) {
+           clearTimeout(previewTimeout);
+           previewTimeout = null;
+       }
+       previewVideo.pause();
+       previewVideo.src = '';
+       if (previewObjectURL) {
+           URL.revokeObjectURL(previewObjectURL);
+           previewObjectURL = null;
+       }
+       recordedBlob = null;
+    }
+
+    function hidePreview() {
+       previewOverlay.classList.remove('active');
+       document.body.classList.remove('showing-preview');
+       resetPreviewState();
+
+       if (!mediaStream || !mediaStream.active) {
+           startCamera();
+       }
+    }
+
+    previewVideo.onloadedmetadata = () => {
+        if (shouldCheckDuration) {
+            if (previewVideo.duration > 61) {
+                const sec = Math.round(previewVideo.duration);
+                showError(`Vidéo trop longue (${Math.floor(sec/60)}m${sec%60}s). Max 60s.`);
+                hidePreview();
+            }
+            shouldCheckDuration = false;
+        }
+    };
+
+    flashBtn.onclick = toggleFlash;
+    
+    switchBtn.onclick = () => {
+       if (isRecording || isCountingDown || isSwitching) return;
+       isSwitching = true;
+       
+       switchBtn.style.transform = "rotate(180deg)";
+       if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+       
+       facingMode = (facingMode === 'environment') ? 'user' : 'environment';
+       
+       startCamera().then(() => {
+          setTimeout(() => switchBtn.style.transform = "rotate(0deg)", 300);
+          isSwitching = false;
+       }).catch(() => {
+          isSwitching = false;
+       });
+    };
+    
+    // --- Galerie: Nettoyer la preview, couper micro, ouvrir menu ---
+    galleryBtn.onclick = () => {
+        // 💥 STOP TOUTES LES ACTIONS EN COURS
+        if (previewTimeout) {
+            clearTimeout(previewTimeout);
+            previewTimeout = null;
+        }
+
+        // 💥 VIDE IMMÉDIATEMENT TOUTES LES VARS QUI PEUVENT RELANCER UNE PREVIEW
+        recordedBlob = null;
+        shouldCheckDuration = false;
+
+        // 💥 VIDE LES SOURCES VIDÉO AVANT hidePreview()
+        previewVideo.pause();
+        previewVideo.src = '';
+        if (previewObjectURL) {
+            URL.revokeObjectURL(previewObjectURL);
+            previewObjectURL = null;
+        }
+
+        // 💥 MAINTENANT on peut cacher la preview
+        hidePreview();
+
+        // 💥 On s’assure que le flux audio ne réutilise rien
+        if (mediaStream) {
+            mediaStream.getAudioTracks().forEach(track => track.stop());
+        }
+
+        // 💥 Reset du champ input
+        galleryInput.value = '';
+
+        // Ouvre la galerie
+        galleryInput.click();
+    };
+    
+    function handleFileSelect(e) {
+       const file = e.target.files[0];
+       if(!file) {
+           startCamera();
+           return;
+       }
+       recordedBlob = file;
+       shouldCheckDuration = true;
+       showPreview(file);
+       e.target.value = '';
+    }
+
+    galleryInput.onchange = handleFileSelect;
+    
+    // --- CORRECTION CLÉ : Double nettoyage de la vidéo de prévisualisation ---
+    restartBtn.onclick = () => {
+        // Nettoyage explicite AVANT d'appeler hidePreview pour vider la source
+        resetPreviewState();
+        hidePreview();
+    };
+    // --- FIN CORRECTION CLÉ ---
+
+    nextBtn.onclick = () => {
+       // Couper immédiatement la preview pour éviter le son pendant l'upload
+       previewVideo.pause();
+       previewVideo.currentTime = 0;
+
+       const url = getUploadURL();
+       uploadOverlay.classList.add('active');
+       uploadText.textContent = "0%";
+       if(!url || !recordedBlob) {
+          uploadText.textContent = "Erreur"; setTimeout(()=>uploadOverlay.classList.remove('active'), 2000); return;
+       }
+       const xhr = new XMLHttpRequest();
+       xhr.open('PUT', url, true);
+       xhr.setRequestHeader('Content-Type', recordedBlob.type);
+       xhr.upload.onprogress = e => { if(e.lengthComputable) uploadText.textContent = Math.round((e.loaded/e.total)*100) + "%"; };
+       xhr.onload = () => {
+          if(xhr.status < 300) {
+             uploadText.textContent = "Succès";
+             const assetId = url.split('/').pop().split('?')[0];
+             notifyHost({ status: 'success', action: 'next_page', asset_id: assetId });
+          } else { uploadText.textContent = "Échec"; setTimeout(()=>uploadOverlay.classList.remove('active'), 2000); }
+       };
+       xhr.send(recordedBlob);
+    };
+    
+    previewOverlay.onclick = (e) => {
+      if(!e.target.closest('.action-btn') && !e.target.closest('#preview-actions')) {
+         previewVideo.paused ? previewVideo.play() : previewVideo.pause();
+      }
+    };
+
+    // --- TEMPORAIRE : message pour ReactNativeWebView ---
+    setTimeout(() => {
+      window.ReactNativeWebView?.postMessage("test-message");
+    }, 3000);
+
+    startCamera();
+
+  </script>
+</body>
+</html>
