@@ -119,7 +119,7 @@
     .music-overlay {
       position: absolute; left: 50%; transform: translateX(-50%);
       padding: 6px 10px;
-      top: calc(env(safe-area-inset-top) + 10px);
+      top: calc(env(safe-area-inset-top) + 44px);
       z-index: 10;
       display: flex; align-items: center; gap: 8px;
       background: linear-gradient(135deg, rgba(15,15,15,0.9), rgba(25,25,25,0.9));
@@ -141,20 +141,9 @@
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
     }
     .music-icon-circle svg { width: 20px; height: 20px; fill: #fff; }
-    .music-mini-wave { display: grid; grid-auto-flow: column; gap: 2px; align-items: flex-end; height: 22px; }
-    .music-mini-wave span {
-      width: 3px; background: linear-gradient(180deg, #fff, rgba(255,255,255,0.3));
-      border-radius: 10px;
-      animation: miniWave 1.2s ease-in-out infinite;
-      animation-delay: calc(var(--i) * 0.06s);
-    }
-    @keyframes miniWave {
-      0%, 100% { transform: scaleY(0.4); opacity: 0.75; }
-      50% { transform: scaleY(1); opacity: 1; }
-    }
 
     #preview-mute-btn {
-      position: absolute; top: calc(env(safe-area-inset-top) + 10px); right: 14px;
+      position: absolute; top: calc(env(safe-area-inset-top) + 44px); right: 14px;
       width: 46px; height: 46px; border-radius: 14px; border: 1px solid var(--glass-border);
       background: var(--glass-bg); color: #fff; font-size: 20px; display: grid; place-items: center;
       cursor: pointer; z-index: 11; backdrop-filter: blur(14px); box-shadow: 0 14px 36px rgba(0,0,0,0.35);
@@ -201,10 +190,10 @@
     .waveform-visual span {
       display: block; width: 6px; align-self: end; border-radius: 6px 6px 2px 2px;
       background: linear-gradient(180deg, #7f7ff5, #5ecbfa);
-      opacity: 0.55; transition: opacity 0.2s, transform 0.2s;
+      opacity: 0.35; transition: opacity 0.2s, transform 0.2s, background 0.2s;
       height: var(--bar-height, 30%);
     }
-    .waveform-visual span.active { opacity: 1; box-shadow: 0 6px 14px rgba(94,203,250,0.35); transform: translateY(-2px); }
+    .waveform-visual span.active { opacity: 1; box-shadow: 0 6px 14px rgba(94,203,250,0.35); transform: translateY(-2px); background: linear-gradient(180deg, #9dd8ff, #6ccfff); }
     .waveform-selection-window {
       position: absolute; top: 0; bottom: 0; left: 0;
       background: rgba(94,203,250,0.15);
@@ -220,6 +209,29 @@
     .action-btn { flex: 1; height: 54px; font-size: 16px; font-weight: 700; border: none; cursor: pointer; border-radius: 14px; }
     #restart-button { background: #1c1c1e; color: #fff; border: 1px solid #333; }
     #next-button { background: #fff; color: #000; }
+
+    #music-controls header { justify-content: flex-start; }
+    #music-controls .title { text-align: left; }
+    #volume-controls label input[type="range"], #music-volume, #original-volume {
+      -webkit-appearance: none; appearance: none; width: 100%; height: 12px;
+      background: linear-gradient(90deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06));
+      border-radius: 999px; outline: none; border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+    }
+    #volume-controls label input[type="range"]::-webkit-slider-thumb, #music-volume::-webkit-slider-thumb, #original-volume::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none; width: 22px; height: 22px; border-radius: 50%;
+      background: linear-gradient(145deg, #ffffff, #b8e1ff); border: 1px solid rgba(0,0,0,0.15);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    #volume-controls label input[type="range"]::-moz-range-thumb, #music-volume::-moz-range-thumb, #original-volume::-moz-range-thumb {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: linear-gradient(145deg, #ffffff, #b8e1ff); border: 1px solid rgba(0,0,0,0.15);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    #volume-controls label input[type="range"]::-moz-range-track, #music-volume::-moz-range-track, #original-volume::-moz-range-track {
+      height: 12px; border-radius: 999px; background: linear-gradient(90deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06));
+      border: 1px solid rgba(255,255,255,0.08);
+    }
 
     /* --- UPLOAD --- */
     #upload-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: opacity 0.2s; }
@@ -288,9 +300,7 @@
         <div id="music-overlay" class="music-overlay hidden">
           <div class="music-visual">
             <div class="music-icon-circle">
-              <div class="music-mini-wave">
-                <span style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span><span style="--i:4"></span>
-              </div>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3v12.26a4.25 4.25 0 1 1-1.5-3.27V7.5l-7 1.56V16a4.25 4.25 0 1 1-1.5-3.27V5.25A1.25 1.25 0 0 1 9.45 4l8.75-1.95A1.25 1.25 0 0 1 19 3Z"></path></svg>
             </div>
           </div>
           <div class="music-meta">
@@ -524,9 +534,17 @@
         if (!waveformVisual) return;
         const bars = Array.from(waveformVisual.children);
         if (!bars.length) return;
-        const ratio = currentMusicDuration ? Math.min(1, musicStartTime / currentMusicDuration) : 0;
-        const activeCount = Math.max(1, Math.round(ratio * bars.length));
-        bars.forEach((bar, idx) => bar.classList.toggle('active', idx < activeCount));
+        const videoDuration = getVideoDuration();
+        const startRatio = currentMusicDuration ? Math.min(1, musicStartTime / currentMusicDuration) : 0;
+        const spanRatio = currentMusicDuration ? Math.min(1, (videoDuration || 0) / currentMusicDuration) : 0;
+        const endRatio = Math.min(1, startRatio + spanRatio);
+        bars.forEach((bar, idx) => {
+            const centerRatio = (idx + 0.5) / bars.length;
+            const active = spanRatio > 0
+                ? (centerRatio >= startRatio && centerRatio <= endRatio)
+                : Math.floor(startRatio * bars.length) === idx;
+            bar.classList.toggle('active', active);
+        });
         updateWaveformSelection();
     }
 
@@ -558,6 +576,11 @@
             const hay = `${opt.title} ${opt.artist}`.toLowerCase();
             return hay.includes(query);
         });
+        const selectedIdx = items.findIndex(opt => opt.id === selectedMusicId);
+        if (selectedIdx > 0) {
+            const [current] = items.splice(selectedIdx, 1);
+            items.unshift(current);
+        }
         if (!items.length) {
             const empty = document.createElement('div');
             empty.textContent = 'Aucun titre';
@@ -880,7 +903,9 @@
             previewMusicSource.loop = true;
             previewMusicSource.connect(previewMusicGain);
             previewMusicGain.connect(previewMasterGain);
-            const offset = buffer.duration ? (musicStartTime % buffer.duration) : musicStartTime;
+            const videoPos = Number(previewVideo?.currentTime) || 0;
+            const offsetBase = musicStartTime + videoPos;
+            const offset = buffer.duration ? (offsetBase % buffer.duration) : offsetBase;
             const startAt = audioCtx.currentTime + 0.05;
             try { previewMusicSource.start(startAt, Math.max(0, offset)); } catch(e) { previewMusicSource.start(); }
         }
@@ -1243,6 +1268,14 @@
             buildPreviewAudioGraph();
         }
     };
+
+    previewVideo.addEventListener('play', () => {
+        buildPreviewAudioGraph();
+    });
+
+    previewVideo.addEventListener('pause', () => {
+        stopPreviewAudioGraph();
+    });
 
     flashBtn.onclick = toggleFlash;
     
