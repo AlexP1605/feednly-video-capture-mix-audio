@@ -332,6 +332,7 @@
 
     .tab-panel { display: none; flex-direction: column; gap: 14px; }
     .tab-panel.active { display: flex; }
+    .audio-tab-title { font-size: 15px; font-weight: 800; text-align: center; margin: 4px 0; }
 
     /* --- UPLOAD --- */
     #upload-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: opacity 0.2s; }
@@ -441,6 +442,7 @@
             </div>
           </div>
           <div id="tab-audio" class="tab-panel">
+            <div class="audio-tab-title">Volume sonore</div>
             <div class="timeline-row" id="volume-row">
               <label>
                 <div class="slider-meta">
@@ -517,6 +519,7 @@
     const tabBtnWaveform = document.getElementById('tab-btn-waveform');
     const tabBtnAudio = document.getElementById('tab-btn-audio');
     let currentlyPlayingMusicId = null;
+    let loopRAF = null;
     let isDraggingWaveform = false;
     let videoDurationSeconds = 0;
     cameraPreview.onloadedmetadata = () => {
@@ -548,7 +551,7 @@
     };
 
     let musicOptions = sanitizeMusicOptions(DEFAULT_MUSIC_OPTIONS);
-    let musicVolume = 0; // Volume musique (0 → 1)
+    let musicVolume = 0.5; // Volume musique (0 → 1)
     let originalVolume = 0.5; // Volume son original (0 → 1)
     let musicStartTime = 0; // Début sélection musique (s)
     let selectedMusicId = null; // Musique choisie pour la preview
@@ -807,8 +810,8 @@
             musicOverlayTitle.textContent = 'Ajouter un son';
             musicOverlayArtist.textContent = '';
             musicOverlayDuration.textContent = '';
-            musicVolume = 0;
-            musicVolumeInput.value = 0;
+            musicVolume = 0.5;
+            musicVolumeInput.value = musicVolume;
             syncVolumeLabels();
             musicOverlay.classList.remove('hidden');
             buildWaveformBars();
@@ -828,8 +831,8 @@
     function clearMusicSelection() {
         selectedMusicId = null;
         musicStartTime = 0;
-        musicVolume = 0;
-        musicVolumeInput.value = 0;
+        musicVolume = 0.5;
+        musicVolumeInput.value = musicVolume;
         updatePositionLabel();
         syncVolumeLabels();
         renderMusicList(musicSearchInput.value);
@@ -843,7 +846,7 @@
             musicOptions = [...DEFAULT_MUSIC_OPTIONS];
         }
         selectedMusicId = null;
-        musicVolume = 0;
+        musicVolume = 0.5;
         originalVolume = 0.5;
         musicStartTime = 0;
         musicSearchInput.value = '';
@@ -875,18 +878,16 @@
     loadMusicCatalog();
 
     async function updateMusicSelectionUI() {
-        const volumeVal = parseFloat(musicVolumeInput.value || '0');
-        musicVolume = Number.isNaN(volumeVal) ? 0 : volumeVal;
+        const volumeVal = parseFloat(musicVolumeInput.value);
+        musicVolume = Number.isNaN(volumeVal) ? 0.5 : volumeVal;
         clampStartForVideoDuration();
         updatePositionLabel();
         updateWaveformProgress();
-        originalVolume = parseFloat(originalVolumeInput.value) || 0;
-        musicVolume = parseFloat(musicVolumeInput.value) || 0;
-        const hasSelection = !!getSelectedMusic();
-        if (!hasSelection) musicVolume = 0;
+        const originalVolumeVal = parseFloat(originalVolumeInput.value);
+        originalVolume = Number.isNaN(originalVolumeVal) ? 0.5 : originalVolumeVal;
         syncVolumeLabels();
         await preloadSelectedMusic();
-        if (musicPreviewAudio && !musicPreviewAudio.paused) {
+        if (musicPreviewAudio) {
             musicPreviewAudio.volume = musicVolume;
         }
         previewVideo.muted = false;
@@ -1075,6 +1076,8 @@
             musicPreviewAudio.onended = null;
             musicPreviewAudio.ontimeupdate = null;
         }
+        cancelAnimationFrame(loopRAF);
+        loopRAF = null;
         currentlyPlayingMusicId = null;
         renderMusicList(musicSearchInput.value);
     }
@@ -1100,30 +1103,39 @@
         updatePositionLabel();
         updateWaveformProgress();
         musicPreviewAudio.src = opt.url;
-        const startFrom = Math.min(Math.max(0, musicStartTime), currentMusicDuration);
-        try { musicPreviewAudio.currentTime = startFrom; } catch (_) {}
+        const getLoopBounds = () => {
+            const start = Math.max(0, Math.min(musicStartTime, currentMusicDuration));
+            const end = Math.max(start, getSelectionEnd());
+            return { start, end };
+        };
+        const startLoopGuard = () => {
+            const tick = () => {
+                if (!currentlyPlayingMusicId || musicPreviewAudio.paused) return;
+                const { start, end } = getLoopBounds();
+                if (musicPreviewAudio.currentTime >= end) {
+                    try { musicPreviewAudio.currentTime = start; } catch (_) {}
+                    musicPreviewAudio.volume = musicVolume;
+                    musicPreviewAudio.play().catch(() => {});
+                }
+                loopRAF = requestAnimationFrame(tick);
+            };
+            cancelAnimationFrame(loopRAF);
+            loopRAF = requestAnimationFrame(tick);
+        };
+        const { start } = getLoopBounds();
+        try { musicPreviewAudio.currentTime = start; } catch (_) {}
         musicPreviewAudio.volume = musicVolume;
-        const endTime = getSelectionEnd();
-        const loopSelection = () => {
-            try { musicPreviewAudio.currentTime = startFrom; } catch (_) {}
-            if (musicPreviewAudio.paused) {
+        musicPreviewAudio.ontimeupdate = () => {
+            const { start, end } = getLoopBounds();
+            if (musicPreviewAudio.currentTime >= end) {
+                try { musicPreviewAudio.currentTime = start; } catch (_) {}
+                musicPreviewAudio.volume = musicVolume;
                 musicPreviewAudio.play().catch(() => {});
             }
         };
-        musicPreviewAudio.onended = () => {
-            if (endTime > startFrom) {
-                loopSelection();
-                return;
-            }
-            stopMusicPreview({ resetPosition: false });
-        };
-        musicPreviewAudio.ontimeupdate = () => {
-            if (endTime > startFrom && musicPreviewAudio.currentTime >= endTime) {
-                loopSelection();
-            }
-        };
         currentlyPlayingMusicId = opt.id;
-        musicPreviewAudio.play();
+        musicPreviewAudio.play().then(() => { musicPreviewAudio.volume = musicVolume; }).catch(() => {});
+        startLoopGuard();
         renderMusicList(musicSearchInput.value);
     }
 
