@@ -187,15 +187,6 @@
       height: var(--bar-height, 30%);
     }
     .waveform-visual span.active { opacity: 1; box-shadow: 0 6px 14px rgba(94,203,250,0.35); transform: translateY(-2px); background: linear-gradient(180deg, #9dd8ff, #6ccfff); }
-    .waveform-selection-window {
-      position: absolute; top: 0; bottom: 0; left: 0;
-      background: rgba(94,203,250,0.15);
-      border-left: 2px solid rgba(94,203,250,0.6);
-      border-right: 2px solid rgba(94,203,250,0.6);
-      pointer-events: none;
-      transition: left 0.15s ease, width 0.15s ease;
-    }
-    .waveform-selection-window.hidden { display: none; }
     .slider-row { display: flex; align-items: center; gap: 10px; }
     .time-actions { display: flex; align-items: center; gap: 10px; }
     .icon-btn {
@@ -229,8 +220,6 @@
 
     #music-controls header { justify-content: flex-start; }
     #music-controls .title { text-align: left; }
-    #volume-controls { gap: 20px; }
-    #volume-controls .title { text-align: left; font-size: 17px; }
     #volume-row { gap: 16px; }
     #volume-row label {
       padding: 16px; border-radius: 18px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
@@ -248,28 +237,28 @@
       font-size: 13px; letter-spacing: 0.5px;
       min-width: 46px; text-align: center;
     }
-    #volume-controls label input[type="range"], #music-volume, #original-volume {
+    #music-volume, #original-volume {
       -webkit-appearance: none; appearance: none; width: 100%; height: 28px;
       background: linear-gradient(90deg, rgba(255,255,255,0.16), rgba(255,255,255,0.08));
       border-radius: 999px; outline: none; border: 1px solid rgba(255,255,255,0.2);
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 10px 30px rgba(0,0,0,0.35);
       padding: 0 10px;
     }
-    #volume-controls label input[type="range"]::-webkit-slider-thumb, #music-volume::-webkit-slider-thumb, #original-volume::-webkit-slider-thumb {
+    #music-volume::-webkit-slider-thumb, #original-volume::-webkit-slider-thumb {
       -webkit-appearance: none; appearance: none; width: 36px; height: 36px; border-radius: 50%;
       background: linear-gradient(145deg, #ffffff, #d5e8ff); border: 1px solid rgba(0,0,0,0.25);
       box-shadow: 0 8px 18px rgba(0,0,0,0.45);
     }
-    #volume-controls label input[type="range"]::-moz-range-thumb, #music-volume::-moz-range-thumb, #original-volume::-moz-range-thumb {
+    #music-volume::-moz-range-thumb, #original-volume::-moz-range-thumb {
       width: 36px; height: 36px; border-radius: 50%;
       background: linear-gradient(145deg, #ffffff, #d5e8ff); border: 1px solid rgba(0,0,0,0.25);
       box-shadow: 0 8px 18px rgba(0,0,0,0.45);
     }
-    #volume-controls label input[type="range"]::-moz-range-track, #music-volume::-moz-range-track, #original-volume::-moz-range-track {
+    #music-volume::-moz-range-track, #original-volume::-moz-range-track {
       height: 28px; border-radius: 999px; background: linear-gradient(90deg, rgba(255,255,255,0.16), rgba(255,255,255,0.08));
       border: 1px solid rgba(255,255,255,0.2);
     }
-    #volume-controls label input[type="range"]::-webkit-slider-runnable-track, #music-volume::-webkit-slider-runnable-track, #original-volume::-webkit-slider-runnable-track {
+    #music-volume::-webkit-slider-runnable-track, #original-volume::-webkit-slider-runnable-track {
       height: 28px; border-radius: 999px; background: linear-gradient(90deg, rgba(255,255,255,0.16), rgba(255,255,255,0.08));
       border: 1px solid rgba(255,255,255,0.2);
     }
@@ -365,47 +354,29 @@
           <div class="timeline-header">
             <span>Choisir le passage</span>
             <div class="time-actions">
-              <span class="time-chip" id="music-position-label">0:00 - 0:00</span>
-              <button type="button" id="music-play-btn" class="icon-btn" aria-label="Lire l'aperçu musique">▶️</button>
+              <span class="time-chip" id="music-position-label">0:00 / 0:00</span>
+              <button type="button" id="music-play-btn" class="icon-btn" aria-label="Lire l'aperçu musique"></button>
             </div>
           </div>
           <div id="waveform-visual" class="waveform-visual" role="presentation">
-            <div id="waveform-selection-window" class="waveform-selection-window hidden"></div>
           </div>
-          <div class="slider-row">
-            <span class="time-chip">Début</span>
-            <input id="music-seek" type="range" min="0" max="30" step="0.25" value="0" class="music-seek-slider" />
+          <div class="timeline-row" id="volume-row">
+            <label>
+              <div class="slider-meta">
+                <span>Son original</span>
+                <span class="value-chip" id="original-volume-value">50</span>
+              </div>
+              <input id="original-volume" type="range" min="0" max="1" step="0.01" value="0.5" />
+            </label>
+            <label>
+              <div class="slider-meta">
+                <span>Musique</span>
+                <span class="value-chip" id="music-volume-value">50</span>
+              </div>
+              <input id="music-volume" type="range" min="0" max="1" step="0.01" value="0.5" />
+            </label>
+            <p class="mixing-hint">Le mixage audio sera appliqué automatiquement lors de la publication.</p>
           </div>
-          <div class="slider-row">
-            <span class="time-chip">Fin</span>
-            <input id="music-end" type="range" min="0" max="30" step="0.25" value="30" class="music-end-slider" />
-          </div>
-        </div>
-      </div>
-      <div id="volume-controls" class="sheet">
-        <div class="sheet-handle"></div>
-        <header>
-          <div class="title">Volumes</div>
-        </header>
-        <div class="timeline-row" id="volume-row">
-          <div class="timeline-header">
-            <span>Volume son</span>
-          </div>
-          <label>
-            <div class="slider-meta">
-              <span>Son original</span>
-              <span class="value-chip" id="original-volume-value">50</span>
-            </div>
-            <input id="original-volume" type="range" min="0" max="1" step="0.01" value="0.5" />
-          </label>
-          <label>
-            <div class="slider-meta">
-              <span>Musique</span>
-              <span class="value-chip" id="music-volume-value">50</span>
-            </div>
-            <input id="music-volume" type="range" min="0" max="1" step="0.01" value="0.5" />
-          </label>
-          <p class="mixing-hint">Le mixage audio sera appliqué automatiquement lors de la publication.</p>
         </div>
       </div>
     <div id="preview-actions">
@@ -449,16 +420,12 @@
     const musicVolumeValue = document.getElementById('music-volume-value');
     const originalVolumeInput = document.getElementById('original-volume');
     const originalVolumeValue = document.getElementById('original-volume-value');
-    const musicSeekInput = document.getElementById('music-seek');
-    const musicEndInput = document.getElementById('music-end');
     const musicPlayBtn = document.getElementById('music-play-btn');
     const musicPositionLabel = document.getElementById('music-position-label');
     const musicSheet = document.getElementById('music-controls');
-    const volumeSheet = document.getElementById('volume-controls');
     const sheetBackdrop = document.getElementById('sheet-backdrop');
     const waveformVisual = document.getElementById('waveform-visual');
-    const waveformSelectionWindow = document.getElementById('waveform-selection-window');
-
+    if (musicPlayBtn) musicPlayBtn.innerHTML = playIconPlay();
     cameraPreview.onloadedmetadata = () => {
       cameraPreview.style.objectFit = "cover";
       cameraPreview.style.opacity = "1"; // garantir affichage plein écran
@@ -491,7 +458,6 @@
     let musicVolume = 0.5; // Volume musique (0 → 1)
     let originalVolume = 0.5; // Volume son original (0 → 1)
     let musicStartTime = 0; // Début sélection musique (s)
-    let musicEndTime = 30; // Fin sélection musique (s)
     let selectedMusicId = null; // Musique choisie pour la preview
     let currentMusicDuration = 30; // Durée connue pour le slider (s)
     const WAVEFORM_BAR_COUNT = 32;
@@ -549,28 +515,13 @@
     }
 
     function updatePositionLabel() {
-        const clampedEnd = Math.min(currentMusicDuration, Math.max(musicEndTime, musicStartTime));
-        const displayTotal = currentMusicDuration;
-        musicPositionLabel.textContent = `${formatTimeLabel(musicStartTime)} - ${formatTimeLabel(clampedEnd)} / ${formatTimeLabel(displayTotal)}`;
+        musicPositionLabel.textContent = `${formatTimeLabel(musicStartTime)} / ${formatTimeLabel(currentMusicDuration)}`;
     }
 
     function setSeekLimits(durationSeconds) {
         currentMusicDuration = Math.max(5, durationSeconds || 30);
-        musicSeekInput.max = currentMusicDuration;
-        musicSeekInput.step = 0.1;
-        musicEndInput.max = currentMusicDuration;
-        musicEndInput.step = 0.1;
         if (musicStartTime > currentMusicDuration) {
             musicStartTime = 0;
-            musicSeekInput.value = 0;
-        }
-        if (musicEndTime > currentMusicDuration) {
-            musicEndTime = currentMusicDuration;
-            musicEndInput.value = musicEndTime;
-        }
-        if (musicEndTime < musicStartTime) {
-            musicEndTime = musicStartTime;
-            musicEndInput.value = musicEndTime;
         }
         updatePositionLabel();
         updateWaveformProgress();
@@ -586,7 +537,6 @@
             bar.style.setProperty('--bar-height', `${Math.min(95, noise)}%`);
             waveformVisual.appendChild(bar);
         }
-        if (waveformSelectionWindow) waveformVisual.appendChild(waveformSelectionWindow);
         updateWaveformProgress();
     }
 
@@ -595,43 +545,25 @@
         const bars = Array.from(waveformVisual.children);
         if (!bars.length) return;
         const startRatio = currentMusicDuration ? Math.min(1, musicStartTime / currentMusicDuration) : 0;
-        const spanRatio = currentMusicDuration ? Math.max(0, (Math.min(musicEndTime, currentMusicDuration) - musicStartTime) / currentMusicDuration) : 0;
-        const endRatio = Math.min(1, startRatio + spanRatio);
         bars.forEach((bar, idx) => {
             const centerRatio = (idx + 0.5) / bars.length;
-            const active = spanRatio > 0
-                ? (centerRatio >= startRatio && centerRatio <= endRatio)
-                : Math.floor(startRatio * bars.length) === idx;
+            const active = Math.floor(startRatio * bars.length) === idx;
             bar.classList.toggle('active', active);
         });
-        updateWaveformSelection();
-    }
-
-    function updateWaveformSelection() {
-        if (!waveformSelectionWindow) return;
-        const playbackSpan = Math.max(0, Math.min(musicEndTime, currentMusicDuration) - musicStartTime);
-        const spanRatio = currentMusicDuration ? Math.min(1, playbackSpan / currentMusicDuration) : 0;
-        const startRatio = currentMusicDuration ? Math.min(1, musicStartTime / currentMusicDuration) : 0;
-        waveformSelectionWindow.classList.toggle('hidden', !currentMusicDuration);
-        waveformSelectionWindow.style.width = `${spanRatio * 100}%`;
-        waveformSelectionWindow.style.left = `${startRatio * 100}%`;
     }
 
     function handleWaveformInteraction(clientX) {
         if (!waveformVisual) return;
         const rect = waveformVisual.getBoundingClientRect();
-        const clampedX = Math.min(Math.max(clientX - rect.left, 0), rect.width);
-        const ratio = rect.width ? clampedX / rect.width : 0;
-        const maxValue = Number(musicSeekInput.max) || currentMusicDuration;
-        const newPos = Math.min(maxValue, Math.max(0, (maxValue || currentMusicDuration) * ratio));
-        const distanceToStart = Math.abs(newPos - musicStartTime);
-        const distanceToEnd = Math.abs(newPos - musicEndTime);
-        if (distanceToStart <= distanceToEnd) {
-            musicSeekInput.value = newPos;
-        } else {
-            musicEndInput.value = newPos;
+        const x = Math.min(Math.max(clientX - rect.left, 0), rect.width);
+        const ratio = x / rect.width;
+        musicStartTime = ratio * currentMusicDuration;
+        updateWaveformProgress();
+        updatePositionLabel();
+        if (currentMusicSource) {
+            stopMusicPreview();
+            toggleMusicPreview();
         }
-        updateMusicSelectionUI();
     }
 
     function renderMusicList(filter = '') {
@@ -683,11 +615,10 @@
             const playBtn = document.createElement('button');
             playBtn.type = 'button';
             playBtn.className = 'icon-btn';
-            playBtn.textContent = '▶️';
-            playBtn.onclick = async (e) => {
+            playBtn.innerHTML = playIconPlay();
+            playBtn.onclick = (e) => {
                 e.stopPropagation();
-                await selectMusic(opt);
-                playMusicPreview();
+                selectMusic(opt).then(() => toggleMusicPreview());
             };
             item.appendChild(playBtn);
             item.onclick = (e) => {
@@ -743,10 +674,7 @@
 
     function clearMusicSelection() {
         selectedMusicId = null;
-        musicSeekInput.value = 0;
         musicStartTime = 0;
-        musicEndTime = currentMusicDuration;
-        musicEndInput.value = musicEndTime;
         musicVolume = 0;
         musicVolumeInput.value = 0;
         updatePositionLabel();
@@ -764,11 +692,8 @@
         musicVolume = selectedMusicId ? 0.5 : 0;
         originalVolume = 0.5;
         musicStartTime = 0;
-        musicEndTime = currentMusicDuration;
         musicSearchInput.value = '';
         musicVolumeInput.value = musicVolume;
-        musicSeekInput.value = musicStartTime;
-        musicEndInput.value = musicEndTime;
         originalVolumeInput.value = originalVolume;
         syncVolumeLabels();
         setSeekLimits(currentMusicDuration);
@@ -798,11 +723,8 @@
 
     async function updateMusicSelectionUI() {
         const volumeVal = parseFloat(musicVolumeInput.value || '0');
-        const offsetVal = parseFloat(musicSeekInput.value || '0');
-        const endVal = parseFloat(musicEndInput.value || '0');
         musicVolume = Number.isNaN(volumeVal) ? 0 : volumeVal;
-        musicStartTime = Number.isNaN(offsetVal) ? 0 : Math.max(0, offsetVal);
-        musicEndTime = Number.isNaN(endVal) ? musicStartTime : Math.max(musicStartTime, Math.min(endVal, currentMusicDuration));
+        musicStartTime = Math.min(Math.max(0, musicStartTime), currentMusicDuration);
         updatePositionLabel();
         updateWaveformProgress();
         originalVolume = parseFloat(originalVolumeInput.value) || 0;
@@ -812,11 +734,12 @@
         syncVolumeLabels();
         if (musicPlayBtn) musicPlayBtn.disabled = !hasSelection;
         await preloadSelectedMusic();
+        if (currentMusicGain) {
+            currentMusicGain.gain.value = musicVolume;
+        }
     }
 
     musicVolumeInput.oninput = updateMusicSelectionUI;
-    musicSeekInput.oninput = updateMusicSelectionUI;
-    musicEndInput.oninput = updateMusicSelectionUI;
     originalVolumeInput.oninput = updateMusicSelectionUI;
     if (waveformVisual) {
         waveformVisual.onclick = (e) => handleWaveformInteraction(e.clientX);
@@ -835,7 +758,6 @@
 
     function closeSheets() {
         musicSheet?.classList.remove('active');
-        volumeSheet?.classList.remove('active');
         sheetBackdrop?.classList.remove('active');
     }
 
@@ -849,11 +771,10 @@
     musicPlayBtn.onclick = (e) => {
         e.stopPropagation();
         if (!getSelectedMusic()) return;
-        playMusicPreview();
+        toggleMusicPreview();
     };
     musicSearchInput.oninput = (e) => renderMusicList(e.target.value);
     musicSheet.onclick = (e) => e.stopPropagation();
-    volumeSheet.onclick = (e) => e.stopPropagation();
     sheetBackdrop.onclick = () => closeSheets();
 
     document.addEventListener('click', (e) => {
@@ -862,7 +783,7 @@
     });
 
     let sheetTouchStartY = null;
-    [musicSheet, volumeSheet].forEach(sheet => {
+    [musicSheet].forEach(sheet => {
         sheet?.addEventListener('touchstart', (e) => {
             sheetTouchStartY = e.touches[0]?.clientY ?? null;
         }, { passive: true });
@@ -957,46 +878,78 @@
         if (currentMusicSource) {
             try { currentMusicSource.stop(); } catch (_) {}
             try { currentMusicSource.disconnect(); } catch (_) {}
-            currentMusicSource = null;
         }
         if (currentMusicGain) {
             try { currentMusicGain.disconnect(); } catch (_) {}
-            currentMusicGain = null;
         }
-        if (musicPlayBtn) musicPlayBtn.textContent = '▶️';
+        currentMusicSource = null;
+        currentMusicGain = null;
+        musicPlayBtn.innerHTML = playIconPlay();
     }
 
-    async function playMusicPreview(start = musicStartTime, end = musicEndTime) {
+    function toggleMusicPreview() {
+        if (currentMusicSource) {
+            stopMusicPreview();
+            return;
+        }
+
         const music = getSelectedMusic();
-        if (!music || !music.url) return;
-        stopMusicPreview();
-        await ensureAudioReady();
-        const buffer = await loadMusicBuffer(music.url);
-        if (!buffer || !audioCtx) return;
+        if (!music) return;
 
-        setSeekLimits(buffer.duration || currentMusicDuration);
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
 
-        const clampedStart = Math.min(Math.max(0, start), buffer.duration);
-        const clampedEnd = Math.max(clampedStart, Math.min(end ?? buffer.duration, buffer.duration));
-        const source = audioCtx.createBufferSource();
-        source.buffer = buffer;
+        loadMusicBuffer(music.url).then(buffer => {
+            if (!buffer) return;
 
-        const gain = audioCtx.createGain();
-        gain.gain.value = musicVolume;
+            setSeekLimits(buffer.duration || currentMusicDuration);
 
-        source.connect(gain).connect(audioCtx.destination);
-        const now = audioCtx.currentTime;
-        source.start(now, clampedStart);
-        source.stop(now + (clampedEnd - clampedStart));
-        currentMusicSource = source;
-        currentMusicGain = gain;
-        if (musicPlayBtn) musicPlayBtn.textContent = '⏸';
-        source.onended = () => {
-            if (currentMusicSource === source) currentMusicSource = null;
-            if (musicPlayBtn) musicPlayBtn.textContent = '▶️';
-        };
+            const source = audioCtx.createBufferSource();
+            const gain = audioCtx.createGain();
+
+            gain.gain.value = musicVolume;
+            source.buffer = buffer;
+
+            source.connect(gain).connect(audioCtx.destination);
+
+            source.start(0, musicStartTime);
+
+            const videoDuration =
+              Number.isFinite(previewVideo?.duration)
+                ? previewVideo.duration
+                : currentMusicDuration;
+
+            const remaining = Math.max(0, videoDuration);
+
+            source.stop(audioCtx.currentTime + remaining);
+            currentMusicSource = source;
+            currentMusicGain = gain;
+
+            musicPlayBtn.innerHTML = playIconPause();
+
+            source.onended = () => {
+                stopMusicPreview();
+            };
+        });
     }
 
+    function playIconPlay() {
+        return `
+    <svg viewBox="0 0 256 256" width="20" height="20" fill="currentColor">
+      <path d="M96 48l96 80-96 80z"/>
+    </svg>`;
+    }
+
+    function playIconPause() {
+        return `
+    <svg viewBox="0 0 256 256" width="20" height="20" fill="currentColor">
+      <path d="M96 48h24v160H96zm40 0h24v160h-24z"/>
+    </svg>`;
+    }
 
     function showError(msg) {
         errorToast.textContent = msg;
@@ -1458,7 +1411,7 @@
     previewOverlay.onclick = async (e) => {
       const tappedAction = e.target.closest('.action-btn') || e.target.closest('#preview-actions');
       const tappedSheet = e.target.closest('.sheet');
-      if ((musicSheet.classList.contains('active') || volumeSheet.classList.contains('active')) && !tappedSheet) {
+      if (musicSheet.classList.contains('active') && !tappedSheet) {
          closeSheets();
          return;
       }
