@@ -1006,7 +1006,7 @@
             }
             if (previewOverlay.classList.contains('active')) {
                 previewVideo.pause();
-                stopMusicPreview();
+                stopMusicPreview({ hard: true });
             }
         } else {
             if (!mediaStream && !isRecording && !isCountingDown) {
@@ -1067,17 +1067,46 @@
         };
     }
 
-    function stopMusicPreview({ resetPosition = true } = {}) {
-        if (musicPreviewAudio) {
-            musicPreviewAudio.pause();
-            if (resetPosition) {
-                try { musicPreviewAudio.currentTime = musicStartTime; } catch (_) {}
-            }
-            musicPreviewAudio.onended = null;
-            musicPreviewAudio.ontimeupdate = null;
+    let isForcingLoop = false;
+
+    function forceLoopAudio(audio, startTime, volume) {
+        if (!audio || isForcingLoop) return;
+        isForcingLoop = true;
+
+        const src = audio.src;
+
+        audio.pause();
+        audio.onended = null;
+        audio.ontimeupdate = null;
+
+        // 🔥 reset dur (OBLIGATOIRE sur iOS)
+        audio.src = '';
+        audio.load();
+
+        audio.src = src;
+        audio.currentTime = startTime;
+        audio.volume = volume;
+
+        audio.play().catch(() => {});
+
+        setTimeout(() => {
+            isForcingLoop = false;
+        }, 100);
+    }
+
+    function stopMusicPreview({ hard = false } = {}) {
+        if (!musicPreviewAudio) return;
+
+        musicPreviewAudio.pause();
+
+        musicPreviewAudio.onended = null;
+        musicPreviewAudio.ontimeupdate = null;
+
+        if (hard) {
+            musicPreviewAudio.src = '';
+            musicPreviewAudio.load();
         }
-        cancelAnimationFrame(loopRAF);
-        loopRAF = null;
+
         currentlyPlayingMusicId = null;
         renderMusicList(musicSearchInput.value);
     }
@@ -1093,49 +1122,49 @@
 
     async function startMusicPreview(opt) {
         if (!opt || !musicPreviewAudio) return;
-        stopMusicPreview({ resetPosition: false });
+
+        stopMusicPreview({ hard: false });
+
         selectedMusicId = opt.id;
+        currentlyPlayingMusicId = opt.id;
+
         updateMusicOverlay();
         updateSeekDurationFromMeta(opt);
         renderMusicList(musicSearchInput.value);
+
         await preloadSelectedMusic();
+
         clampStartForVideoDuration();
         updatePositionLabel();
         updateWaveformProgress();
-        musicPreviewAudio.src = opt.url;
+
         const getLoopBounds = () => {
             const start = Math.max(0, Math.min(musicStartTime, currentMusicDuration));
-            const end = Math.max(start, getSelectionEnd());
+            const end = Math.max(start + 0.05, getSelectionEnd());
             return { start, end };
         };
-        const startLoopGuard = () => {
-            const tick = () => {
-                if (!currentlyPlayingMusicId || musicPreviewAudio.paused) return;
-                const { start, end } = getLoopBounds();
-                if (musicPreviewAudio.currentTime >= end) {
-                    try { musicPreviewAudio.currentTime = start; } catch (_) {}
-                    musicPreviewAudio.volume = musicVolume;
-                    musicPreviewAudio.play().catch(() => {});
-                }
-                loopRAF = requestAnimationFrame(tick);
-            };
-            cancelAnimationFrame(loopRAF);
-            loopRAF = requestAnimationFrame(tick);
-        };
+
         const { start } = getLoopBounds();
-        try { musicPreviewAudio.currentTime = start; } catch (_) {}
+
+        musicPreviewAudio.src = opt.url;
+        musicPreviewAudio.currentTime = start;
         musicPreviewAudio.volume = musicVolume;
+
+        musicPreviewAudio.play().catch(() => {});
+
+        // ✅ LOOP GARANTI
         musicPreviewAudio.ontimeupdate = () => {
             const { start, end } = getLoopBounds();
-            if (musicPreviewAudio.currentTime >= end) {
-                try { musicPreviewAudio.currentTime = start; } catch (_) {}
-                musicPreviewAudio.volume = musicVolume;
-                musicPreviewAudio.play().catch(() => {});
+            if (musicPreviewAudio.currentTime >= end || musicPreviewAudio.ended) {
+                forceLoopAudio(musicPreviewAudio, start, musicVolume);
             }
         };
-        currentlyPlayingMusicId = opt.id;
-        musicPreviewAudio.play().then(() => { musicPreviewAudio.volume = musicVolume; }).catch(() => {});
-        startLoopGuard();
+
+        musicPreviewAudio.onended = () => {
+            const { start } = getLoopBounds();
+            forceLoopAudio(musicPreviewAudio, start, musicVolume);
+        };
+
         renderMusicList(musicSearchInput.value);
     }
 
@@ -1470,16 +1499,16 @@
     }
 
     function resetPreviewState() {
-       if (previewTimeout) {
-           clearTimeout(previewTimeout);
-           previewTimeout = null;
-       }
-       stopMusicPreview();
-       previewVideo.pause();
-       previewVideo.src = '';
-       if (previewObjectURL) {
-           URL.revokeObjectURL(previewObjectURL);
-           previewObjectURL = null;
+        if (previewTimeout) {
+            clearTimeout(previewTimeout);
+            previewTimeout = null;
+        }
+        stopMusicPreview({ hard: true });
+        previewVideo.pause();
+        previewVideo.src = '';
+        if (previewObjectURL) {
+            URL.revokeObjectURL(previewObjectURL);
+            previewObjectURL = null;
        }
        recordedBlob = null;
        videoDurationSeconds = 0;
@@ -1590,7 +1619,7 @@
        // Couper immédiatement la preview pour éviter le son pendant l'upload
        previewVideo.pause();
        previewVideo.currentTime = 0;
-       stopMusicPreview();
+       stopMusicPreview({ hard: true });
 
        const url = getUploadURL();
        uploadOverlay.classList.add('active');
