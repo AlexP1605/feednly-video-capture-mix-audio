@@ -256,8 +256,8 @@
     #restart-button { background: #1c1c1e; color: #fff; border: 1px solid #333; }
     #next-button { background: #fff; color: #000; }
 
-    #music-controls header { justify-content: flex-start; }
-    #music-controls .title { text-align: left; }
+    #music-controls header { justify-content: center; }
+    #music-controls .title { text-align: center; }
     #volume-row { gap: 12px; }
     #volume-row label {
       padding: 12px; border-radius: 14px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
@@ -276,11 +276,10 @@
       min-width: 40px; text-align: center;
     }
     #music-volume, #original-volume {
-      -webkit-appearance: none; appearance: none; width: 100%; height: 12px;
-      background: rgba(255,255,255,0.14);
-      border-radius: 999px; outline: none; border: 1px solid rgba(255,255,255,0.16);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
-      padding: 0 6px;
+      -webkit-appearance: none; appearance: none; width: 100%; height: 8px;
+      background: rgba(255,255,255,0.16);
+      border-radius: 999px; outline: none; border: none;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
     }
     #music-volume::-webkit-slider-thumb, #original-volume::-webkit-slider-thumb {
       -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%;
@@ -293,12 +292,11 @@
       box-shadow: 0 4px 10px rgba(0,0,0,0.35);
     }
     #music-volume::-moz-range-track, #original-volume::-moz-range-track {
-      height: 12px; border-radius: 999px; background: rgba(255,255,255,0.14);
-      border: 1px solid rgba(255,255,255,0.16);
+      height: 8px; border-radius: 999px; background: rgba(255,255,255,0.16);
+      border: none;
     }
     #music-volume::-webkit-slider-runnable-track, #original-volume::-webkit-slider-runnable-track {
-      height: 12px; border-radius: 999px; background: rgba(255,255,255,0.14);
-      border: 1px solid rgba(255,255,255,0.16);
+      height: 8px; border-radius: 999px; background: rgba(255,255,255,0.16);
     }
 
     .tab-bar {
@@ -418,14 +416,29 @@
           <header>
             <div class="title">Musique</div>
           </header>
-          <p style="margin: 0; opacity: 0.6; font-size: 12px;">La musique sera ajoutée automatiquement au moment de la publication de la vidéo.</p>
+          <p style="margin: 0; opacity: 0.6; font-size: 12px; text-align: center;">La musique sera ajoutée automatiquement au moment de la publication de la vidéo.</p>
           <div class="tab-bar" id="music-tab-bar">
-            <button type="button" class="tab-btn active" id="tab-btn-sound">Son</button>
+            <button type="button" class="tab-btn active" id="tab-btn-music">Musique</button>
             <button type="button" class="tab-btn" id="tab-btn-waveform">Waveforme</button>
+            <button type="button" class="tab-btn" id="tab-btn-audio">Son</button>
           </div>
-          <div id="tab-sound" class="tab-panel active">
+          <div id="tab-music" class="tab-panel active">
             <input id="music-search" type="search" placeholder="Rechercher un titre ou un artiste" />
             <div id="music-list"></div>
+          </div>
+          <div id="tab-waveform" class="tab-panel">
+            <div class="timeline-row">
+              <div class="timeline-header">
+                <span>Choisir le passage</span>
+                <div class="time-actions">
+                  <span class="time-chip" id="music-position-label">0:00 – 0:00 / 0:00</span>
+                </div>
+              </div>
+              <div id="waveform-visual" class="waveform-visual" role="presentation">
+              </div>
+            </div>
+          </div>
+          <div id="tab-audio" class="tab-panel">
             <div class="timeline-row" id="volume-row">
               <label>
                 <div class="slider-meta">
@@ -442,18 +455,6 @@
                 <input id="music-volume" type="range" min="0" max="1" step="0.01" value="0.5" />
               </label>
               <p class="mixing-hint">Le mixage audio sera appliqué automatiquement lors de la publication.</p>
-            </div>
-          </div>
-          <div id="tab-waveform" class="tab-panel">
-            <div class="timeline-row">
-              <div class="timeline-header">
-                <span>Choisir le passage</span>
-                <div class="time-actions">
-                  <span class="time-chip" id="music-position-label">0:00 – 0:00 / 0:00</span>
-                </div>
-              </div>
-              <div id="waveform-visual" class="waveform-visual" role="presentation">
-              </div>
             </div>
           </div>
         </div>
@@ -508,9 +509,11 @@
     let waveformHandleStart = null;
     let waveformHandleEnd = null;
     const tabWaveform = document.getElementById('tab-waveform');
-    const tabSound = document.getElementById('tab-sound');
-    const tabBtnSound = document.getElementById('tab-btn-sound');
+    const tabMusicTab = document.getElementById('tab-music');
+    const tabAudio = document.getElementById('tab-audio');
+    const tabBtnMusic = document.getElementById('tab-btn-music');
     const tabBtnWaveform = document.getElementById('tab-btn-waveform');
+    const tabBtnAudio = document.getElementById('tab-btn-audio');
     let currentlyPlayingMusicId = null;
     let isDraggingWaveform = false;
     let videoDurationSeconds = 0;
@@ -805,7 +808,7 @@
         musicOverlay.classList.toggle('empty', !music);
         if (!music) {
             musicOverlayTitle.textContent = 'Ajouter un son';
-            musicOverlayArtist.textContent = 'Catalogue';
+            musicOverlayArtist.textContent = '';
             musicOverlayDuration.textContent = '';
             musicVolume = 0;
             musicVolumeInput.value = 0;
@@ -919,19 +922,23 @@
         }, { passive: true });
     }
 
-    function setActiveTab(tabKey = 'sound') {
-        const showSound = tabKey === 'sound';
-        tabSound?.classList.toggle('active', showSound);
-        tabWaveform?.classList.toggle('active', !showSound);
-        tabBtnSound?.classList.toggle('active', showSound);
-        tabBtnWaveform?.classList.toggle('active', !showSound);
+    function setActiveTab(tabKey = 'music') {
+        const showMusic = tabKey === 'music';
+        const showWaveform = tabKey === 'waveform';
+        const showAudio = tabKey === 'audio';
+        tabMusicTab?.classList.toggle('active', showMusic);
+        tabWaveform?.classList.toggle('active', showWaveform);
+        tabAudio?.classList.toggle('active', showAudio);
+        tabBtnMusic?.classList.toggle('active', showMusic);
+        tabBtnWaveform?.classList.toggle('active', showWaveform);
+        tabBtnAudio?.classList.toggle('active', showAudio);
     }
 
     function openSheet(sheet) {
         if (!sheet) return;
         closeSheets();
         if (sheet === musicSheet) {
-            setActiveTab('sound');
+            setActiveTab('music');
         }
         sheet.classList.add('active');
         sheetBackdrop?.classList.add('active');
@@ -947,14 +954,15 @@
         if (originalVolumeValue) originalVolumeValue.textContent = Math.round((parseFloat(originalVolumeInput.value) || 0) * 100);
     }
 
-    tabBtnSound?.addEventListener('click', () => setActiveTab('sound'));
+    tabBtnMusic?.addEventListener('click', () => setActiveTab('music'));
     tabBtnWaveform?.addEventListener('click', () => {
         setActiveTab('waveform');
         updatePositionLabel();
         updateWaveformProgress();
     });
+    tabBtnAudio?.addEventListener('click', () => setActiveTab('audio'));
 
-    musicOverlay.onclick = (e) => { e.stopPropagation(); setActiveTab('sound'); openSheet(musicSheet); };
+    musicOverlay.onclick = (e) => { e.stopPropagation(); setActiveTab('music'); openSheet(musicSheet); };
     musicClearBtn.onclick = (e) => { e.stopPropagation(); clearMusicSelection(); };
     musicSearchInput.oninput = (e) => renderMusicList(e.target.value);
     musicSheet.onclick = (e) => e.stopPropagation();
