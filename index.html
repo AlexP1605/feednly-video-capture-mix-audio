@@ -388,6 +388,8 @@
   <div id="upload-overlay"><div class="spinner"></div><div id="upload-text">Préparation...</div></div>
   <input type="file" id="camera-input" accept="video/*" capture="environment" />
   <input type="file" id="galleryInput" accept="video/*" />
+  <audio id="music-preview" playsinline
+    style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0;"></audio>
 
   <script>
     const cameraPreview = document.getElementById('camera-preview');
@@ -404,6 +406,7 @@
     const restartBtn = document.getElementById('restart-button');
     const nextBtn = document.getElementById('next-button');
     const galleryInput = document.getElementById('galleryInput');
+    const musicPreviewAudio = document.getElementById('music-preview');
     const uploadOverlay = document.getElementById('upload-overlay');
     const uploadText = document.getElementById('upload-text');
     const progressCircle = document.getElementById('record-progress-circle');
@@ -464,12 +467,33 @@
 
     async function preloadSelectedMusic() {
         const music = getSelectedMusic();
-        if (!music || !music.url) return null;
-        try {
-            return await loadMusicBuffer(music.url);
-        } catch (_) {
-            return null;
-        }
+        if (!music || !music.url || !musicPreviewAudio) return null;
+
+        return new Promise((resolve) => {
+            const onLoaded = () => {
+                if (Number.isFinite(musicPreviewAudio.duration)) {
+                    setSeekLimits(Math.floor(musicPreviewAudio.duration));
+                }
+                cleanup();
+                resolve(musicPreviewAudio.duration || null);
+            };
+
+            const onError = () => {
+                cleanup();
+                resolve(null);
+            };
+
+            const cleanup = () => {
+                musicPreviewAudio.removeEventListener('loadedmetadata', onLoaded);
+                musicPreviewAudio.removeEventListener('error', onError);
+            };
+
+            musicPreviewAudio.addEventListener('loadedmetadata', onLoaded);
+            musicPreviewAudio.addEventListener('error', onError);
+            musicPreviewAudio.preload = 'auto';
+            musicPreviewAudio.src = music.url;
+            musicPreviewAudio.load();
+        });
     }
     
     let facingMode = 'environment';
@@ -562,7 +586,8 @@
         musicStartTime = ratio * currentMusicDuration;
         updateWaveformProgress();
         updatePositionLabel();
-        if (currentMusicSource) {
+        const isPlaying = musicPreviewAudio && !musicPreviewAudio.paused && !musicPreviewAudio.ended;
+        if (isPlaying) {
             stopMusicPreview();
             toggleMusicPreview();
         }
@@ -620,7 +645,20 @@
             playBtn.innerHTML = playIconPlay();
             playBtn.onclick = (e) => {
                 e.stopPropagation();
-                selectMusic(opt).then(() => toggleMusicPreview());
+                stopMusicPreview();
+
+                selectedMusicId = opt.id;
+                updateMusicOverlay();
+                updateSeekDurationFromMeta(opt);
+                renderMusicList(musicSearchInput.value);
+
+                musicPreviewAudio.src = opt.url;
+                musicPreviewAudio.currentTime = musicStartTime;
+                musicPreviewAudio.volume = musicVolume;
+
+                musicPreviewAudio.play();
+
+                musicPlayBtn.innerHTML = playIconPause();
             };
             item.appendChild(playBtn);
             item.onclick = (e) => {
@@ -640,7 +678,7 @@
 
     async function selectMusic(opt) {
         if (!opt) return;
-        await ensureAudioReady();
+        stopMusicPreview();
         selectedMusicId = opt.id;
         updateMusicOverlay();
         updateSeekDurationFromMeta(opt);
@@ -734,8 +772,8 @@
         syncVolumeLabels();
         if (musicPlayBtn) musicPlayBtn.disabled = !hasSelection;
         await preloadSelectedMusic();
-        if (currentMusicGain) {
-            currentMusicGain.gain.value = musicVolume;
+        if (musicPreviewAudio && !musicPreviewAudio.paused) {
+            musicPreviewAudio.volume = musicVolume;
         }
     }
 
@@ -804,10 +842,7 @@
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     let audioCtx = null;
 
-    // --- AJOUT MUSIQUE : buffers & noeuds partagés ---
-    const musicBufferCache = new Map();
-    let currentMusicSource = null;
-    let currentMusicGain = null;
+    // --- AJOUT MUSIQUE : lecteur HTML pour l'aperçu ---
 
     // --- Optimisation Fluidité (Gérer la visibilité de la page) ---
     document.addEventListener('visibilitychange', () => {
@@ -881,79 +916,35 @@
         };
     }
 
-    // --- AJOUT MUSIQUE : charge ou réutilise le buffer depuis l'URL choisie ---
-    async function loadMusicBuffer(url) {
-        if (!url) return null;
-        if (musicBufferCache.has(url)) return musicBufferCache.get(url);
-        await ensureAudioReady();
-        try {
-            const res = await fetch(url);
-            const arrayBuffer = await res.arrayBuffer();
-            const decoded = await audioCtx.decodeAudioData(arrayBuffer);
-            musicBufferCache.set(url, decoded);
-            return decoded;
-        } catch (e) {
-            console.warn('Musique introuvable, fallback micro seul.', e);
-            musicBufferCache.set(url, null);
-            return null;
-        }
-    }
-
     function stopMusicPreview() {
-        if (currentMusicSource) {
-            try { currentMusicSource.stop(); } catch (_) {}
-            try { currentMusicSource.disconnect(); } catch (_) {}
+        if (musicPreviewAudio) {
+            musicPreviewAudio.pause();
+            musicPreviewAudio.currentTime = 0;
+            musicPreviewAudio.onended = null;
         }
-        if (currentMusicGain) {
-            try { currentMusicGain.disconnect(); } catch (_) {}
-        }
-        currentMusicSource = null;
-        currentMusicGain = null;
         musicPlayBtn.innerHTML = playIconPlay();
     }
 
     function toggleMusicPreview() {
-        unlockAudioContext();
-        if (currentMusicSource) {
+        if (!musicPreviewAudio) return;
+        const music = getSelectedMusic();
+        if (!music || !music.url) return;
+
+        const isPlaying = !musicPreviewAudio.paused && !musicPreviewAudio.ended;
+        if (isPlaying) {
             stopMusicPreview();
             return;
         }
 
-        const music = getSelectedMusic();
-        if (!music) return;
-
-        loadMusicBuffer(music.url).then(buffer => {
-            if (!buffer) return;
-
-            setSeekLimits(buffer.duration || currentMusicDuration);
-
-            const source = audioCtx.createBufferSource();
-            const gain = audioCtx.createGain();
-
-            gain.gain.value = musicVolume;
-            source.buffer = buffer;
-
-            source.connect(gain).connect(audioCtx.destination);
-
-            source.start(0, musicStartTime);
-
-            const videoDuration =
-              Number.isFinite(previewVideo?.duration)
-                ? previewVideo.duration
-                : currentMusicDuration;
-
-            const remaining = Math.max(0, videoDuration);
-
-            source.stop(audioCtx.currentTime + remaining);
-            currentMusicSource = source;
-            currentMusicGain = gain;
-
-            musicPlayBtn.innerHTML = playIconPause();
-
-            source.onended = () => {
-                stopMusicPreview();
-            };
-        });
+        musicPreviewAudio.onended = () => stopMusicPreview();
+        if (musicPreviewAudio.src !== music.url) {
+            musicPreviewAudio.src = music.url;
+        }
+        const startFrom = Math.min(Math.max(0, musicStartTime), currentMusicDuration);
+        musicPreviewAudio.volume = musicVolume;
+        try { musicPreviewAudio.currentTime = startFrom; } catch (_) {}
+        musicPreviewAudio.play();
+        musicPlayBtn.innerHTML = playIconPause();
     }
 
     function playIconPlay() {
