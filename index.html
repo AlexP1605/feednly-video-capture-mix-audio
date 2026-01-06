@@ -686,7 +686,7 @@
         updateSeekDurationFromMeta(opt);
         renderMusicList(musicSearchInput.value);
         await preloadSelectedMusic();
-        await restartPreviewAudio(true);
+        await restartPreviewAudio();
     }
 
     function updateMusicOverlay() {
@@ -770,7 +770,7 @@
 
     loadMusicCatalog();
 
-    async function restartPreviewAudio(forceAutoplay = false) {
+    async function restartPreviewAudio() {
         await ensureAudioReady();
         const volumeVal = parseFloat(musicVolumeInput.value || '0');
         const offsetVal = parseFloat(musicSeekInput.value || '0');
@@ -784,18 +784,17 @@
         syncVolumeLabels();
         if (previewOverlay.classList.contains('active')) {
             await preloadSelectedMusic();
-            if (forceAutoplay) {
-                previewVideo.currentTime = 0;
-            }
-            if (forceAutoplay || previewVideo.paused) {
-                await previewVideo.play().catch(()=>{});
-            }
-            await refreshPreviewAudioWhilePlaying();
         }
     }
 
     musicVolumeInput.oninput = restartPreviewAudio;
-    musicSeekInput.oninput = restartPreviewAudio;
+    musicSeekInput.oninput = () => {
+        restartPreviewAudio();
+        if (!previewVideo.paused) {
+            stopPreviewAudioGraph();
+            playMusicSyncedToVideo();
+        }
+    };
     originalVolumeInput.oninput = restartPreviewAudio;
     if (waveformVisual) {
         waveformVisual.onclick = (e) => handleWaveformInteraction(e.clientX);
@@ -884,6 +883,19 @@
     document.addEventListener('touchstart', unlockAudioNow, { passive: true });
     document.addEventListener('pointerdown', unlockAudioNow, { passive: true });
 
+    function primeAudio() {
+        if (!audioCtx) return;
+
+        try {
+            const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.02, audioCtx.sampleRate);
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioCtx.destination);
+            source.start();
+            source.stop(audioCtx.currentTime + 0.025);
+        } catch (_) {}
+    }
+
     // --- AJOUT MUSIQUE : buffers & noeuds partagés ---
     const musicBufferCache = new Map();
     let previewMusicSource = null;
@@ -891,9 +903,6 @@
     let previewMicGain = null;
     let previewMasterGain = null;
     let previewMediaSource = null;
-    let syncTimer = null;
-    let previewMusicStartAt = 0;
-    let previewMusicOffset = 0;
 
     // --- Optimisation Fluidité (Gérer la visibilité de la page) ---
     document.addEventListener('visibilitychange', () => {
@@ -906,7 +915,6 @@
             }
             if (previewOverlay.classList.contains('active')) {
                 previewVideo.pause();
-                stopSyncLoop();
                 stopPreviewAudioGraph();
             }
         } else {
@@ -962,9 +970,14 @@
 
     function stopPreviewAudioGraph() {
         if (previewMusicSource) {
-            try { previewMusicSource.stop(); } catch(_){}
+            try { previewMusicSource.stop(); } catch (_) {}
+            try { previewMusicSource.disconnect(); } catch (_) {}
+            previewMusicSource = null;
         }
-        previewMusicSource = null;
+        if (previewMusicGain) {
+            try { previewMusicGain.disconnect(); } catch (_) {}
+            previewMusicGain = null;
+        }
     }
 
     function applyPreviewGainSettings() {
@@ -973,9 +986,11 @@
         if (previewMusicGain) previewMusicGain.gain.value = previewMuted ? 0 : musicVolume;
     }
 
-    async function refreshPreviewAudioWhilePlaying() {
+    async function playMusicSyncedToVideo() {
         if (!previewVideo || previewVideo.paused) return;
         await ensureAudioReady();
+        await preloadSelectedMusic();
+        await buildPreviewAudioGraph();
 
         if (!previewMasterGain || !previewMicGain || !previewMediaSource) return;
 
@@ -1007,47 +1022,25 @@
         previewMusicSource.loop = true;
         previewMusicSource.connect(previewMusicGain);
 
-        const videoPos = Number(previewVideo?.currentTime) || 0;
-        const offsetBase = musicStartTime + videoPos;
+        const videoTime = Number(previewVideo?.currentTime) || 0;
+        const offsetBase = musicStartTime + videoTime;
         const offset = buffer.duration ? (offsetBase % buffer.duration) : offsetBase;
-        const startAt = audioCtx.currentTime + 0.005;
-        let actualStartAt = startAt;
         let actualOffset = Math.max(0, offset);
 
         try {
-            previewMusicSource.start(startAt, actualOffset);
+            previewMusicSource.start(0, actualOffset);
         } catch (e) {
-            actualStartAt = audioCtx.currentTime;
             actualOffset = 0;
             try { previewMusicSource.start(); } catch(_) {}
         }
-
-        previewMusicStartAt = actualStartAt;
-        previewMusicOffset = actualOffset;
     }
 
     function startSyncLoop() {
-        stopSyncLoop();
-        syncTimer = setInterval(() => {
-            if (!previewOverlay.classList.contains('active')) return;
-            if (previewVideo.paused || !previewMusicSource) return;
-
-            const expected = musicStartTime + (Number(previewVideo?.currentTime) || 0);
-            const actual = (audioCtx.currentTime - previewMusicStartAt) + previewMusicOffset;
-
-            if (Math.abs(expected - actual) > 0.15) {
-                refreshPreviewAudioWhilePlaying();
-            }
-        }, 250);
-    }
-
-    function stopSyncLoop() {
-        if (syncTimer) clearInterval(syncTimer);
-        syncTimer = null;
+        // No sync loop: audio restarts only on play/pause changes.
     }
 
     async function buildPreviewAudioGraph() {
-        if (!previewVideo || !recordedBlob || previewVideo.paused) return;
+        if (!previewVideo || previewVideo.paused) return;
         await ensureAudioReady();
 
         if (!previewMediaSource) {
@@ -1267,13 +1260,15 @@
     }
     
     // --- LOGIQUE BOUTON ROBUSTE ---
-    recordWrapBtn.onclick = (e) => {
+    recordWrapBtn.onclick = async (e) => {
       e.stopPropagation();
       if (isToggleLocked) return;
       isToggleLocked = true;
       setTimeout(() => { isToggleLocked = false; }, 300);
 
-      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
+      await ensureAudioReady();
+      unlockAudioNow();
+      primeAudio();
 
       if (isRecording) {
         stopRecording();
@@ -1382,7 +1377,7 @@
 
        previewOverlay.classList.add('active');
        document.body.classList.add('showing-preview');
-       restartPreviewAudio(true);
+       restartPreviewAudio();
     }
 
     function resetPreviewState() {
@@ -1403,7 +1398,6 @@
     function hidePreview() {
        previewOverlay.classList.remove('active');
        document.body.classList.remove('showing-preview');
-       stopSyncLoop();
        resetPreviewState();
 
        if (!mediaStream || !mediaStream.active) {
@@ -1425,16 +1419,11 @@
     };
 
     previewVideo.addEventListener('play', async () => {
-        await ensureAudioReady();
-        await preloadSelectedMusic();
-        buildPreviewAudioGraph();
-        await refreshPreviewAudioWhilePlaying();
-        startSyncLoop();
+        await playMusicSyncedToVideo();
     });
 
     previewVideo.addEventListener('pause', () => {
         stopPreviewAudioGraph();
-        stopSyncLoop();
     });
 
     flashBtn.onclick = toggleFlash;
@@ -1541,7 +1530,7 @@
        xhr.send(recordedBlob);
     };
     
-    previewOverlay.onclick = (e) => {
+    previewOverlay.onclick = async (e) => {
       const tappedAction = e.target.closest('.action-btn') || e.target.closest('#preview-actions');
       const tappedSheet = e.target.closest('.sheet');
       if ((musicSheet.classList.contains('active') || volumeSheet.classList.contains('active')) && !tappedSheet) {
@@ -1549,7 +1538,14 @@
          return;
       }
       if(!tappedAction) {
-         previewVideo.paused ? previewVideo.play() : previewVideo.pause();
+         if (previewVideo.paused) {
+            await ensureAudioReady();
+            unlockAudioNow();
+            primeAudio();
+            previewVideo.play().catch(()=>{});
+         } else {
+            previewVideo.pause();
+         }
       }
     };
 
