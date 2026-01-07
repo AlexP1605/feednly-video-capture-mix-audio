@@ -128,7 +128,7 @@
     #preview-video {
       width: 100%;
       height: 100%;
-      object-fit: contain;
+      object-fit: cover;
       pointer-events: none;
       background: #000;
     }
@@ -1613,12 +1613,15 @@
       }
 
       const ctx = recordingCanvas.getContext('2d');
+      const TARGET_W = 1080;
+      const TARGET_H = 1920;
       const updateCanvasSize = () => {
-        if (cameraPreview.videoWidth && cameraPreview.videoHeight) {
-          if (recordingCanvas.width !== cameraPreview.videoWidth || recordingCanvas.height !== cameraPreview.videoHeight) {
-            recordingCanvas.width = cameraPreview.videoWidth;
-            recordingCanvas.height = cameraPreview.videoHeight;
-          }
+        if (
+          recordingCanvas.width !== TARGET_W ||
+          recordingCanvas.height !== TARGET_H
+        ) {
+          recordingCanvas.width = TARGET_W;
+          recordingCanvas.height = TARGET_H;
         }
       };
 
@@ -1626,6 +1629,19 @@
       let lastDraw = 0;
       const TARGET_FPS = 30;
       const FRAME_TIME = 1000 / TARGET_FPS;
+      function drawCover(ctx, video, cw, ch) {
+        const vw = video.videoWidth;
+        const vh = video.videoHeight;
+        if (!vw || !vh) return;
+
+        const scale = Math.max(cw / vw, ch / vh);
+        const sw = cw / scale;
+        const sh = ch / scale;
+        const sx = (vw - sw) / 2;
+        const sy = (vh - sh) / 2;
+
+        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
+      }
       const drawFrame = (now) => {
         if (!drawing) return;
         if (now - lastDraw < FRAME_TIME) {
@@ -1646,7 +1662,7 @@
           ctx.translate(recordingCanvas.width, 0);
           ctx.scale(-1, 1);
         }
-        ctx.drawImage(cameraPreview, 0, 0, recordingCanvas.width, recordingCanvas.height);
+        drawCover(ctx, cameraPreview, recordingCanvas.width, recordingCanvas.height);
         ctx.restore();
 
         requestAnimationFrame(drawFrame);
