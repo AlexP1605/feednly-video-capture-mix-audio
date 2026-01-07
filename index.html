@@ -159,7 +159,7 @@
     .sheet { position: absolute; left: 0; right: 0; bottom: 0; padding: 20px 18px 0; display: flex; flex-direction: column; gap: 18px; background: rgba(10,10,10,0.96); color: #fff; border-top-left-radius: 26px; border-top-right-radius: 26px; transform: translateY(110%); transition: transform 0.28s ease; z-index: 80; box-shadow: 0 -18px 40px rgba(0,0,0,0.55); height: 80dvh; max-height: 80dvh; overflow: hidden; }
     .sheet.active { transform: translateY(0); }
     .sheet .sheet-handle { width: 70px; height: 6px; border-radius: 10px; background: #2f2f2f; align-self: center; margin-bottom: 4px; }
-    .sheet-content { display: flex; flex-direction: column; gap: 18px; overflow-y: auto; padding-bottom: 12px; }
+    .sheet-content { display: flex; flex-direction: column; gap: 18px; flex: 1; overflow-y: auto; padding-bottom: 90px; }
     .sheet header { display: flex; align-items: center; justify-content: center; gap: 10px; }
     .sheet .title { font-size: 16px; font-weight: 800; letter-spacing: 0.3px; text-align: center; }
     .sheet label { font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -304,11 +304,13 @@
     }
 
     .sheet-footer {
-      position: sticky;
+      position: absolute;
+      left: 0;
+      right: 0;
       bottom: 0;
-      padding: 10px 0 calc(18px + env(safe-area-inset-bottom));
+      padding: 10px 18px calc(18px + env(safe-area-inset-bottom));
       background: rgba(10,10,10,0.98);
-      z-index: 5;
+      z-index: 20;
     }
 
     .tab-bar {
@@ -815,11 +817,11 @@
             const playBtn = document.createElement('button');
             playBtn.type = 'button';
             playBtn.className = 'icon-btn';
-            const isPlayingThis = currentlyPlayingMusicId === opt.id && activeMusicAudio && !activeMusicAudio.paused && !activeMusicAudio.ended;
+            const isPlayingThis = currentlyPlayingMusicId === opt.id && activeMusicAudio && !activeMusicAudio.paused;
             playBtn.innerHTML = isPlayingThis ? playIconPause() : playIconPlay();
             playBtn.onclick = (e) => {
                 e.stopPropagation();
-                const alreadyPlaying = currentlyPlayingMusicId === opt.id && activeMusicAudio && !activeMusicAudio.paused && !activeMusicAudio.ended;
+                const alreadyPlaying = currentlyPlayingMusicId === opt.id && activeMusicAudio && !activeMusicAudio.paused;
                 if (alreadyPlaying) {
                     stopMusicPreview();
                     return;
@@ -1126,8 +1128,8 @@
 
     let isForcingLoop = false;
     let isCrossfading = false;
-    const LOOP_EPSILON = 0.03;
-    const LOOP_CROSSFADE_MS = 120;
+    const LOOP_EPSILON = 0.18;
+    const LOOP_CROSSFADE_MS = 220;
 
     function seekAudioTo(audio, time) {
         if (!audio) return;
@@ -1146,15 +1148,14 @@
         audio.loop = false;
         audio.muted = false;
         audio.volume = 0;
+        audio.playbackRate = 1.0;
+        audio.preservesPitch = true;
     }
 
     function attachLoopHandlers(audio) {
         if (!audio) return;
         audio.ontimeupdate = () => {
-            ensureLoopPlayback('timeupdate');
-        };
-        audio.onended = () => {
-            ensureLoopPlayback('ended');
+            ensureLoopPlayback();
         };
     }
 
@@ -1217,28 +1218,26 @@
         });
     }
 
-    function ensureLoopPlayback(reason = '') {
-        if (!activeMusicAudio || !currentlyPlayingMusicId) return;
+    function ensureLoopPlayback() {
+        if (!activeMusicAudio || !currentlyPlayingMusicId || isCrossfading) return;
+
         const { start, end } = getLoopBounds();
         const current = activeMusicAudio.currentTime || 0;
-        const shouldLoop = current >= (end - LOOP_EPSILON) || activeMusicAudio.ended;
-        if (shouldLoop) {
+
+        if (current >= (end - LOOP_EPSILON)) {
             startSeamlessLoop(start);
             return;
         }
-        if (current + LOOP_EPSILON < start) {
-            startSeamlessLoop(start);
-            return;
-        }
-        if (activeMusicAudio.paused && !isForcingLoop && activeMusicAudio.src && !isCrossfading) {
-            activeMusicAudio.play().catch(() => {});
+
+        if (current < start) {
+            seekAudioTo(activeMusicAudio, start);
         }
     }
 
     function startLoopWatchdog() {
         if (loopWatchdogId) return;
         loopWatchdogId = setInterval(() => {
-            ensureLoopPlayback('watchdog');
+            ensureLoopPlayback();
         }, 200);
     }
 
@@ -1256,7 +1255,7 @@
 
         startSeamlessLoop(startTime);
 
-        if (audio.paused || audio.ended) {
+        if (audio.paused) {
             audio.play().catch(() => {});
         }
 
@@ -1302,7 +1301,7 @@
         if (!currentlyPlayingMusicId) return;
         const music = musicOptions.find(opt => opt.id === currentlyPlayingMusicId);
         if (!music) return;
-        if (activeMusicAudio && !activeMusicAudio.paused && !activeMusicAudio.ended) {
+        if (activeMusicAudio && !activeMusicAudio.paused) {
             startMusicPreview(music);
         }
     }
