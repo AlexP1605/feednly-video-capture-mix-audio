@@ -34,7 +34,7 @@
 
     video {
       width: 100%; height: 100%; object-fit: cover; display: block;
-      transform: scaleX(1); pointer-events: none;
+      pointer-events: none;
     }
     video::-webkit-media-controls { display: none !important; }
 
@@ -114,7 +114,7 @@
     #preview-overlay { position: fixed; inset: 0; z-index: 50; background: #000; display: none; opacity: 0; flex-direction: column; transition: opacity 0.2s ease; }
     #preview-overlay.active { display: flex; opacity: 1; }
     .preview-video-container { flex: 1; position: relative; overflow: hidden; border-bottom-left-radius: 24px; border-bottom-right-radius: 24px; background: #000; }
-    #preview-video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+    #preview-video { width: 100%; height: 100%; object-fit: cover; object-position: center; transform: none; pointer-events: none; }
 
     .music-overlay {
       position: absolute; left: 50%; transform: translateX(-50%);
@@ -441,6 +441,8 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
+      object-position: center;
+      transform: none;
     }
   </style>
 </head>
@@ -534,10 +536,6 @@
               </div>
             </div>
             <div id="tab-audio" class="tab-panel">
-              <div class="audio-tab-title">
-                <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M80 104v48H48a16 16 0 0 1-16-16v-16a16 16 0 0 1 16-16Zm16-16a8 8 0 0 1 13.66-5.66l40 40a8 8 0 0 1 0 11.32l-40 40A8 8 0 0 1 96 168Zm72 8a8 8 0 0 1 8 8v48a8 8 0 0 1-16 0v-48a8 8 0 0 1 8-8Zm28-20a8 8 0 0 1 8 8v88a8 8 0 0 1-16 0V84a8 8 0 0 1 8-8Z"></path></svg>
-                <span>Volume sonore</span>
-              </div>
               <div class="timeline-row" id="volume-row">
                 <label>
                   <div class="slider-meta">
@@ -553,7 +551,6 @@
                   </div>
                   <input id="music-volume" type="range" min="0" max="1" step="0.01" value="0.5" />
                 </label>
-                <p class="mixing-hint">Le mixage audio sera appliqué automatiquement lors de la publication.</p>
               </div>
             </div>
           </div>
@@ -568,7 +565,7 @@
                 <span class="tab-label">Waveform</span>
               </button>
               <button type="button" class="tab-btn" id="tab-btn-audio" aria-label="Son">
-                <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M80 100v56H40a16 16 0 0 1-16-16v-24a16 16 0 0 1 16-16Zm16-16a8 8 0 0 1 13.66-5.66l56 56A8 8 0 0 1 168 136v32a8 8 0 0 1-13.66 5.66l-56-56A8 8 0 0 1 96 112Zm88 12a8 8 0 0 1 8 8v56a8 8 0 0 1-16 0v-56a8 8 0 0 1 8-8Zm28-20a8 8 0 0 1 8 8v96a8 8 0 0 1-16 0v-96a8 8 0 0 1 8-8Z"></path></svg>
+                <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M32 96v64a16 16 0 0 0 16 16h32l48 48a8 8 0 0 0 13.66-5.66V37.66A8 8 0 0 0 128 32L80 80H48a16 16 0 0 0-16 16Zm136 8a8 8 0 0 1 8 8v32a8 8 0 0 1-16 0v-32a8 8 0 0 1 8-8Zm32-24a8 8 0 0 1 8 8v80a8 8 0 0 1-16 0V88a8 8 0 0 1 8-8Z"></path></svg>
                 <span class="tab-label">Son</span>
               </button>
             </div>
@@ -1795,7 +1792,6 @@
        closeFilterSheet();
        closeMusicSheet();
 
-       previewVideo.style.transform = "scaleX(1)";
 
        previewOverlay.classList.add('active');
        document.body.classList.add('showing-preview');
