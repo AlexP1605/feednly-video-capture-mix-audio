@@ -157,6 +157,7 @@
     .sheet-backdrop.active { opacity: 1; pointer-events: auto; }
     .sheet { position: absolute; left: 0; right: 0; bottom: 0; padding: 20px 18px 0; display: flex; flex-direction: column; gap: 18px; background: rgba(10,10,10,0.96); color: #fff; border-top-left-radius: 26px; border-top-right-radius: 26px; transform: translateY(110%); transition: transform 0.28s ease; z-index: 80; box-shadow: 0 -18px 40px rgba(0,0,0,0.55); height: 80dvh; max-height: 80dvh; overflow: hidden; }
     .sheet.active { transform: translateY(0); }
+    #music-filter-sheet { height: 30dvh; max-height: 30dvh; }
     .sheet .sheet-handle { width: 70px; height: 6px; border-radius: 10px; background: #2f2f2f; align-self: center; margin-bottom: 4px; }
     .sheet-content { display: flex; flex-direction: column; gap: 18px; flex: 1; overflow-y: auto; padding-bottom: 90px; }
     .sheet header { display: flex; align-items: center; justify-content: center; gap: 10px; }
@@ -413,7 +414,7 @@
 
     #recording-timer {
       position: fixed;
-      top: calc(env(safe-area-inset-top) + 16px);
+      top: calc(env(safe-area-inset-top) + 6px);
       left: 50%;
       transform: translateX(-50%);
       z-index: 45;
@@ -562,7 +563,7 @@
                 <span class="tab-label">Waveform</span>
               </button>
               <button type="button" class="tab-btn" id="tab-btn-audio" aria-label="Son">
-                <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M216 96v64a8 8 0 0 1-16 0V96a8 8 0 0 1 16 0Zm-32-32v128a8 8 0 0 1-16 0V64a8 8 0 0 1 16 0Zm-32 24v80a8 8 0 0 1-16 0V88a8 8 0 0 1 16 0ZM96 104v48a8 8 0 0 1-16 0v-8H56a16 16 0 0 1-16-16v-16a16 16 0 0 1 16-16h24v-8a8 8 0 0 1 16 0Zm96 128H64a8 8 0 0 1 0-16h128a8 8 0 0 1 0 16Z"></path></svg>
+                <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M80 100v56H40a16 16 0 0 1-16-16v-24a16 16 0 0 1 16-16Zm16-16a8 8 0 0 1 13.66-5.66l56 56A8 8 0 0 1 168 136v32a8 8 0 0 1-13.66 5.66l-56-56A8 8 0 0 1 96 112Zm88 12a8 8 0 0 1 8 8v56a8 8 0 0 1-16 0v-56a8 8 0 0 1 8-8Zm28-20a8 8 0 0 1 8 8v96a8 8 0 0 1-16 0v-96a8 8 0 0 1 8-8Z"></path></svg>
                 <span class="tab-label">Son</span>
               </button>
             </div>
@@ -838,6 +839,23 @@
         return String(tag || '').trim().toLowerCase();
     }
 
+    function getTrackTags(opt) {
+        const tagList = [];
+        const rawTags = opt?.tags;
+        const rawGenre = opt?.genre;
+        if (Array.isArray(rawTags)) {
+            tagList.push(...rawTags);
+        } else if (typeof rawTags === 'string') {
+            tagList.push(...rawTags.split(','));
+        }
+        if (Array.isArray(rawGenre)) {
+            tagList.push(...rawGenre);
+        } else if (typeof rawGenre === 'string') {
+            tagList.push(...rawGenre.split(','));
+        }
+        return tagList.map(normalizeTag).filter(Boolean);
+    }
+
     function renderFilterTags() {
         if (!musicFilterTags) return;
         musicFilterTags.innerHTML = '';
@@ -864,8 +882,8 @@
         musicListEl.innerHTML = '';
         const items = musicOptions.filter(opt => {
             const hay = `${opt.title} ${opt.artist}`.toLowerCase();
-            const tags = Array.isArray(opt.tags) ? opt.tags.map(normalizeTag) : [];
-            const matchesTag = !activeTag || tags.includes(activeTag);
+            const tags = getTrackTags(opt);
+            const matchesTag = !activeTag || tags.some((tag) => tag.includes(activeTag) || activeTag.includes(tag));
             return hay.includes(query) && matchesTag;
         });
         if (!items.length) {
@@ -1758,6 +1776,7 @@
        previewVideo.loop = true;
        previewVideo.currentTime = 0;
        previewVideo.play().catch(() => {});
+       previewVideo.style.objectFit = 'cover';
 
        // Sélection par défaut à chaque nouvelle preview
        resetMusicDefaults();
