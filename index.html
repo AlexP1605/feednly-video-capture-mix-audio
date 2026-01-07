@@ -1598,16 +1598,9 @@
       const ctx = recordingCanvas.getContext('2d');
       const updateCanvasSize = () => {
         if (cameraPreview.videoWidth && cameraPreview.videoHeight) {
-          const maxWidth = 1280;
-          const maxHeight = 720;
-          const widthRatio = maxWidth / cameraPreview.videoWidth;
-          const heightRatio = maxHeight / cameraPreview.videoHeight;
-          const scale = Math.min(1, widthRatio, heightRatio);
-          const targetWidth = Math.round(cameraPreview.videoWidth * scale);
-          const targetHeight = Math.round(cameraPreview.videoHeight * scale);
-          if (recordingCanvas.width !== targetWidth || recordingCanvas.height !== targetHeight) {
-            recordingCanvas.width = targetWidth;
-            recordingCanvas.height = targetHeight;
+          if (recordingCanvas.width !== cameraPreview.videoWidth || recordingCanvas.height !== cameraPreview.videoHeight) {
+            recordingCanvas.width = cameraPreview.videoWidth;
+            recordingCanvas.height = cameraPreview.videoHeight;
           }
         }
       };
