@@ -156,9 +156,11 @@
       opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 60;
     }
     .sheet-backdrop.active { opacity: 1; pointer-events: auto; }
-    .sheet { position: absolute; left: 0; right: 0; bottom: 0; padding: 24px 18px 32px; display: flex; flex-direction: column; gap: 18px; background: rgba(10,10,10,0.96); color: #fff; border-top-left-radius: 26px; border-top-right-radius: 26px; transform: translateY(110%); transition: transform 0.28s ease; z-index: 80; box-shadow: 0 -18px 40px rgba(0,0,0,0.55); height: 80dvh; max-height: 80dvh; overflow-y: auto; }
+    .sheet { position: absolute; left: 0; right: 0; bottom: 0; padding: 20px 18px 0; display: flex; flex-direction: column; gap: 18px; background: rgba(10,10,10,0.96); color: #fff; border-top-left-radius: 26px; border-top-right-radius: 26px; transform: translateY(110%); transition: transform 0.28s ease; z-index: 80; box-shadow: 0 -18px 40px rgba(0,0,0,0.55); height: 80dvh; max-height: 80dvh; overflow: hidden; }
     .sheet.active { transform: translateY(0); }
     .sheet .sheet-handle { width: 70px; height: 6px; border-radius: 10px; background: #2f2f2f; align-self: center; margin-bottom: 4px; }
+    .sheet-content { display: flex; flex-direction: column; gap: 18px; overflow-y: auto; padding-bottom: 12px; }
+    .sheet-footer { padding: 6px 0 calc(18px + env(safe-area-inset-bottom)); background: rgba(10,10,10,0.96); }
     .sheet header { display: flex; align-items: center; justify-content: center; gap: 10px; }
     .sheet .title { font-size: 16px; font-weight: 800; letter-spacing: 0.3px; text-align: center; }
     .sheet label { font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -417,49 +419,53 @@
       <div id="sheet-backdrop" class="sheet-backdrop"></div>
         <div id="music-controls" class="sheet">
           <div class="sheet-handle"></div>
-          <header>
-            <div class="title">Musique</div>
-          </header>
-          <p style="margin: 0; opacity: 0.6; font-size: 12px; text-align: center;">La musique sera ajoutée automatiquement au moment de la publication de la vidéo.</p>
-          <div class="tab-bar" id="music-tab-bar">
-            <button type="button" class="tab-btn active" id="tab-btn-music">Musique</button>
-            <button type="button" class="tab-btn" id="tab-btn-waveform">Waveforme</button>
-            <button type="button" class="tab-btn" id="tab-btn-audio">Son</button>
-          </div>
-          <div id="tab-music" class="tab-panel active">
-            <input id="music-search" type="search" placeholder="Rechercher un titre ou un artiste" />
-            <div id="music-list"></div>
-          </div>
-          <div id="tab-waveform" class="tab-panel">
-            <div class="timeline-row">
-              <div class="timeline-header">
-                <span>Choisir le passage</span>
-                <div class="time-actions">
-                  <span class="time-chip" id="music-position-label">0:00 – 0:00 / 0:00</span>
+          <div class="sheet-content">
+            <header>
+              <div class="title">Musique</div>
+            </header>
+            <p style="margin: 0; opacity: 0.6; font-size: 12px; text-align: center;">La musique sera ajoutée automatiquement au moment de la publication de la vidéo.</p>
+            <div id="tab-music" class="tab-panel active">
+              <input id="music-search" type="search" placeholder="Rechercher un titre ou un artiste" />
+              <div id="music-list"></div>
+            </div>
+            <div id="tab-waveform" class="tab-panel">
+              <div class="timeline-row">
+                <div class="timeline-header">
+                  <span>Choisir le passage</span>
+                  <div class="time-actions">
+                    <span class="time-chip" id="music-position-label">0:00 – 0:00 / 0:00</span>
+                  </div>
+                </div>
+                <div id="waveform-visual" class="waveform-visual" role="presentation">
                 </div>
               </div>
-              <div id="waveform-visual" class="waveform-visual" role="presentation">
+            </div>
+            <div id="tab-audio" class="tab-panel">
+              <div class="audio-tab-title">Volume sonore</div>
+              <div class="timeline-row" id="volume-row">
+                <label>
+                  <div class="slider-meta">
+                    <span>Son original</span>
+                    <span class="value-chip" id="original-volume-value">50</span>
+                  </div>
+                  <input id="original-volume" type="range" min="0" max="1" step="0.01" value="0.5" />
+                </label>
+                <label>
+                  <div class="slider-meta">
+                    <span>Musique</span>
+                    <span class="value-chip" id="music-volume-value">50</span>
+                  </div>
+                  <input id="music-volume" type="range" min="0" max="1" step="0.01" value="0.5" />
+                </label>
+                <p class="mixing-hint">Le mixage audio sera appliqué automatiquement lors de la publication.</p>
               </div>
             </div>
           </div>
-          <div id="tab-audio" class="tab-panel">
-            <div class="audio-tab-title">Volume sonore</div>
-            <div class="timeline-row" id="volume-row">
-              <label>
-                <div class="slider-meta">
-                  <span>Son original</span>
-                  <span class="value-chip" id="original-volume-value">50</span>
-                </div>
-                <input id="original-volume" type="range" min="0" max="1" step="0.01" value="0.5" />
-              </label>
-              <label>
-                <div class="slider-meta">
-                  <span>Musique</span>
-                  <span class="value-chip" id="music-volume-value">50</span>
-                </div>
-                <input id="music-volume" type="range" min="0" max="1" step="0.01" value="0.5" />
-              </label>
-              <p class="mixing-hint">Le mixage audio sera appliqué automatiquement lors de la publication.</p>
+          <div class="sheet-footer">
+            <div class="tab-bar" id="music-tab-bar">
+              <button type="button" class="tab-btn active" id="tab-btn-music">Musique</button>
+              <button type="button" class="tab-btn" id="tab-btn-waveform">Waveforme</button>
+              <button type="button" class="tab-btn" id="tab-btn-audio">Son</button>
             </div>
           </div>
         </div>
@@ -521,6 +527,7 @@
     const tabBtnAudio = document.getElementById('tab-btn-audio');
     let currentlyPlayingMusicId = null;
     let loopRAF = null;
+    let loopWatchdogId = null;
     let isDraggingWaveform = false;
     let videoDurationSeconds = 0;
     cameraPreview.onloadedmetadata = () => {
@@ -635,6 +642,12 @@
     function getSelectionEnd() {
         const clipDuration = Math.max(0, videoDurationSeconds || 0);
         return Math.min(currentMusicDuration, musicStartTime + clipDuration);
+    }
+
+    function getLoopBounds() {
+        const start = Math.max(0, Math.min(musicStartTime, currentMusicDuration));
+        const end = Math.max(start + 0.05, getSelectionEnd());
+        return { start, end };
     }
 
     function updatePositionLabel() {
@@ -1070,6 +1083,34 @@
 
     let isForcingLoop = false;
 
+    function ensureLoopPlayback(reason = '') {
+        if (!musicPreviewAudio || !currentlyPlayingMusicId) return;
+        const { start, end } = getLoopBounds();
+        const current = musicPreviewAudio.currentTime || 0;
+        const shouldLoop = current >= end || musicPreviewAudio.ended;
+        if (shouldLoop) {
+            forceLoopAudio(musicPreviewAudio, start, musicVolume);
+            return;
+        }
+        if (musicPreviewAudio.paused && !isForcingLoop && musicPreviewAudio.src) {
+            musicPreviewAudio.play().catch(() => {});
+        }
+    }
+
+    function startLoopWatchdog() {
+        if (loopWatchdogId) return;
+        loopWatchdogId = setInterval(() => {
+            ensureLoopPlayback('watchdog');
+        }, 200);
+    }
+
+    function stopLoopWatchdog() {
+        if (loopWatchdogId) {
+            clearInterval(loopWatchdogId);
+            loopWatchdogId = null;
+        }
+    }
+
     function forceLoopAudio(audio, startTime, volume) {
         if (!audio || isForcingLoop) return;
         isForcingLoop = true;
@@ -1109,6 +1150,8 @@
         }
 
         currentlyPlayingMusicId = null;
+        isForcingLoop = false;
+        stopLoopWatchdog();
         renderMusicList(musicSearchInput.value);
     }
 
@@ -1139,12 +1182,6 @@
         updatePositionLabel();
         updateWaveformProgress();
 
-        const getLoopBounds = () => {
-            const start = Math.max(0, Math.min(musicStartTime, currentMusicDuration));
-            const end = Math.max(start + 0.05, getSelectionEnd());
-            return { start, end };
-        };
-
         const { start } = getLoopBounds();
 
         musicPreviewAudio.src = opt.url;
@@ -1155,16 +1192,14 @@
 
         // ✅ LOOP GARANTI
         musicPreviewAudio.ontimeupdate = () => {
-            const { start, end } = getLoopBounds();
-            if (musicPreviewAudio.currentTime >= end || musicPreviewAudio.ended) {
-                forceLoopAudio(musicPreviewAudio, start, musicVolume);
-            }
+            ensureLoopPlayback('timeupdate');
         };
 
         musicPreviewAudio.onended = () => {
-            const { start } = getLoopBounds();
-            forceLoopAudio(musicPreviewAudio, start, musicVolume);
+            ensureLoopPlayback('ended');
         };
+
+        startLoopWatchdog();
 
         renderMusicList(musicSearchInput.value);
     }
