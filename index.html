@@ -1075,20 +1075,32 @@
         tabBtnAudio?.classList.toggle('active', showAudio);
     }
 
-    function openSheet(sheet) {
-        if (!sheet) return;
-        closeSheets();
-        if (sheet === musicSheet) {
-            setActiveTab('music');
-        }
-        sheet.classList.add('active');
-        sheetBackdrop?.classList.add('active');
+    function updateSheetBackdrop() {
+        const hasActiveSheet = musicSheet?.classList.contains('active') || musicFilterSheet?.classList.contains('active');
+        sheetBackdrop?.classList.toggle('active', hasActiveSheet);
     }
 
-    function closeSheets() {
+    function openMusicSheet() {
+        if (!musicSheet) return;
+        setActiveTab('music');
+        musicSheet.classList.add('active');
+        updateSheetBackdrop();
+    }
+
+    function openFilterSheet() {
+        if (!musicFilterSheet) return;
+        musicFilterSheet.classList.add('active');
+        updateSheetBackdrop();
+    }
+
+    function closeMusicSheet() {
         musicSheet?.classList.remove('active');
+        updateSheetBackdrop();
+    }
+
+    function closeFilterSheet() {
         musicFilterSheet?.classList.remove('active');
-        sheetBackdrop?.classList.remove('active');
+        updateSheetBackdrop();
     }
 
     function syncVolumeLabels() {
@@ -1108,8 +1120,12 @@
             originalVolumeInput.value = sanitized;
         }
         syncVolumeLabels();
-        previewVideo.muted = false;
-        previewVideo.volume = originalVolume;
+        if (previewVideo) {
+            previewVideo.volume = originalVolume;
+            if (previewVideo.muted) {
+                previewVideo.muted = false;
+            }
+        }
     }
 
     tabBtnMusic?.addEventListener('click', () => setActiveTab('music'));
@@ -1120,20 +1136,36 @@
     });
     tabBtnAudio?.addEventListener('click', () => setActiveTab('audio'));
 
-    musicOverlay.onclick = (e) => { e.stopPropagation(); setActiveTab('music'); openSheet(musicSheet); };
+    musicOverlay.onclick = (e) => { e.stopPropagation(); openMusicSheet(); };
     musicClearBtn.onclick = (e) => { e.stopPropagation(); clearMusicSelection(); };
     musicSearchInput.oninput = (e) => renderMusicList(e.target.value);
     musicFilterBtn?.addEventListener('click', (e) => {
         e.stopPropagation();
-        openSheet(musicFilterSheet);
+        if (musicFilterSheet?.classList.contains('active')) {
+            closeFilterSheet();
+            return;
+        }
+        openFilterSheet();
     });
     musicSheet.onclick = (e) => e.stopPropagation();
     musicFilterSheet.onclick = (e) => e.stopPropagation();
-    sheetBackdrop.onclick = () => closeSheets();
+    sheetBackdrop.onclick = () => {
+        if (musicFilterSheet?.classList.contains('active')) {
+            closeFilterSheet();
+            return;
+        }
+        closeMusicSheet();
+    };
 
     document.addEventListener('click', (e) => {
         if (!sheetBackdrop.classList.contains('active')) return;
-        if (e.target === sheetBackdrop) closeSheets();
+        if (e.target === sheetBackdrop) {
+            if (musicFilterSheet?.classList.contains('active')) {
+                closeFilterSheet();
+                return;
+            }
+            closeMusicSheet();
+        }
     });
 
     let sheetTouchStartY = null;
@@ -1146,7 +1178,7 @@
             if (sheetTouchStartY === null) return;
             const endY = e.changedTouches[0]?.clientY ?? 0;
             if (endY - sheetTouchStartY > 60) {
-                closeSheets();
+                closeFilterSheet();
             }
             sheetTouchStartY = null;
         });
@@ -1731,7 +1763,8 @@
 
        // Sélection par défaut à chaque nouvelle preview
        resetMusicDefaults();
-        closeSheets();
+       closeFilterSheet();
+       closeMusicSheet();
 
        previewVideo.style.transform = "scaleX(1)";
 
@@ -1889,7 +1922,11 @@
       const tappedAction = e.target.closest('.action-btn') || e.target.closest('#preview-actions');
       const tappedSheet = e.target.closest('.sheet');
       if ((musicSheet.classList.contains('active') || musicFilterSheet.classList.contains('active')) && !tappedSheet) {
-         closeSheets();
+         if (musicFilterSheet.classList.contains('active')) {
+            closeFilterSheet();
+         } else {
+            closeMusicSheet();
+         }
          return;
       }
       if(!tappedAction) {
