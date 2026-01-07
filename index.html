@@ -1786,7 +1786,7 @@
        previewVideo.loop = true;
        previewVideo.currentTime = 0;
        previewVideo.play().catch(() => {});
-       previewVideo.style.objectFit = 'cover';
+       previewVideo.style.objectFit = 'contain';
 
        // Sélection par défaut à chaque nouvelle preview
        resetMusicDefaults();
