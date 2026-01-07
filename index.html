@@ -515,6 +515,8 @@
   <input type="file" id="galleryInput" accept="video/*" />
   <audio id="music-preview" playsinline
     style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0;"></audio>
+  <audio id="music-preview-standby" playsinline
+    style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0;"></audio>
 
   <script>
     const cameraPreview = document.getElementById('camera-preview');
@@ -552,6 +554,9 @@
     const musicSheet = document.getElementById('music-controls');
     const sheetBackdrop = document.getElementById('sheet-backdrop');
     const waveformVisual = document.getElementById('waveform-visual');
+    const musicPreviewStandby = document.getElementById('music-preview-standby');
+    let activeMusicAudio = musicPreviewAudio;
+    let standbyMusicAudio = musicPreviewStandby;
     let waveformHandleStart = null;
     let waveformHandleEnd = null;
     const tabWaveform = document.getElementById('tab-waveform');
@@ -810,11 +815,11 @@
             const playBtn = document.createElement('button');
             playBtn.type = 'button';
             playBtn.className = 'icon-btn';
-            const isPlayingThis = currentlyPlayingMusicId === opt.id && musicPreviewAudio && !musicPreviewAudio.paused && !musicPreviewAudio.ended;
+            const isPlayingThis = currentlyPlayingMusicId === opt.id && activeMusicAudio && !activeMusicAudio.paused && !activeMusicAudio.ended;
             playBtn.innerHTML = isPlayingThis ? playIconPause() : playIconPlay();
             playBtn.onclick = (e) => {
                 e.stopPropagation();
-                const alreadyPlaying = currentlyPlayingMusicId === opt.id && musicPreviewAudio && !musicPreviewAudio.paused && !musicPreviewAudio.ended;
+                const alreadyPlaying = currentlyPlayingMusicId === opt.id && activeMusicAudio && !activeMusicAudio.paused && !activeMusicAudio.ended;
                 if (alreadyPlaying) {
                     stopMusicPreview();
                     return;
@@ -936,8 +941,11 @@
         originalVolume = Number.isNaN(originalVolumeVal) ? 0.5 : originalVolumeVal;
         syncVolumeLabels();
         await preloadSelectedMusic();
-        if (musicPreviewAudio) {
-            musicPreviewAudio.volume = musicVolume;
+        if (activeMusicAudio) {
+            activeMusicAudio.volume = musicVolume;
+        }
+        if (standbyMusicAudio) {
+            standbyMusicAudio.volume = 0;
         }
         previewVideo.muted = false;
         previewVideo.volume = originalVolume;
@@ -1117,7 +1125,9 @@
     }
 
     let isForcingLoop = false;
+    let isCrossfading = false;
     const LOOP_EPSILON = 0.03;
+    const LOOP_CROSSFADE_MS = 120;
 
     function seekAudioTo(audio, time) {
         if (!audio) return;
@@ -1130,21 +1140,98 @@
         } catch (_) {}
     }
 
+    function setPreviewAudioBaseState(audio) {
+        if (!audio) return;
+        audio.preload = 'auto';
+        audio.loop = false;
+        audio.muted = false;
+        audio.volume = 0;
+    }
+
+    function attachLoopHandlers(audio) {
+        if (!audio) return;
+        audio.ontimeupdate = () => {
+            ensureLoopPlayback('timeupdate');
+        };
+        audio.onended = () => {
+            ensureLoopPlayback('ended');
+        };
+    }
+
+    function getActivePreviewAudio() {
+        return activeMusicAudio;
+    }
+
+    function getStandbyPreviewAudio() {
+        return standbyMusicAudio || null;
+    }
+
+    function swapPreviewAudios() {
+        if (!standbyMusicAudio) return;
+        [activeMusicAudio, standbyMusicAudio] = [standbyMusicAudio, activeMusicAudio];
+    }
+
+    function fadeVolumes(active, incoming, onDone) {
+        const startTime = performance.now();
+        const duration = LOOP_CROSSFADE_MS;
+
+        function step(now) {
+            const progress = Math.min(1, (now - startTime) / duration);
+            const gainIn = progress;
+            const gainOut = 1 - progress;
+            if (incoming) incoming.volume = musicVolume * gainIn;
+            if (active) active.volume = musicVolume * gainOut;
+            if (progress < 1) {
+                requestAnimationFrame(step);
+            } else {
+                if (active) active.pause();
+                if (active) active.currentTime = active.currentTime || 0;
+                if (active) active.volume = 0;
+                if (incoming) incoming.volume = musicVolume;
+                if (typeof onDone === 'function') onDone();
+            }
+        }
+
+        requestAnimationFrame(step);
+    }
+
+    function startSeamlessLoop(startTime) {
+        if (isCrossfading) return;
+        const active = getActivePreviewAudio();
+        const standby = getStandbyPreviewAudio();
+        if (!active || !standby) return;
+        isCrossfading = true;
+
+        standby.src = active.src;
+        standby.load();
+        standby.volume = 0;
+        seekAudioTo(standby, startTime);
+        standby.play().then(() => {
+            fadeVolumes(active, standby, () => {
+                swapPreviewAudios();
+                attachLoopHandlers(activeMusicAudio);
+                isCrossfading = false;
+            });
+        }).catch(() => {
+            isCrossfading = false;
+        });
+    }
+
     function ensureLoopPlayback(reason = '') {
-        if (!musicPreviewAudio || !currentlyPlayingMusicId) return;
+        if (!activeMusicAudio || !currentlyPlayingMusicId) return;
         const { start, end } = getLoopBounds();
-        const current = musicPreviewAudio.currentTime || 0;
-        const shouldLoop = current >= (end - LOOP_EPSILON) || musicPreviewAudio.ended;
+        const current = activeMusicAudio.currentTime || 0;
+        const shouldLoop = current >= (end - LOOP_EPSILON) || activeMusicAudio.ended;
         if (shouldLoop) {
-            forceLoopAudio(musicPreviewAudio, start, musicVolume);
+            startSeamlessLoop(start);
             return;
         }
         if (current + LOOP_EPSILON < start) {
-            forceLoopAudio(musicPreviewAudio, start, musicVolume);
+            startSeamlessLoop(start);
             return;
         }
-        if (musicPreviewAudio.paused && !isForcingLoop && musicPreviewAudio.src) {
-            musicPreviewAudio.play().catch(() => {});
+        if (activeMusicAudio.paused && !isForcingLoop && activeMusicAudio.src && !isCrossfading) {
+            activeMusicAudio.play().catch(() => {});
         }
     }
 
@@ -1167,7 +1254,7 @@
         isForcingLoop = true;
         audio.volume = volume;
 
-        seekAudioTo(audio, startTime);
+        startSeamlessLoop(startTime);
 
         if (audio.paused || audio.ended) {
             audio.play().catch(() => {});
@@ -1179,20 +1266,34 @@
     }
 
     function stopMusicPreview({ hard = false } = {}) {
-        if (!musicPreviewAudio) return;
+        if (!activeMusicAudio) return;
 
-        musicPreviewAudio.pause();
+        activeMusicAudio.pause();
+        if (standbyMusicAudio) {
+            standbyMusicAudio.pause();
+        }
 
-        musicPreviewAudio.onended = null;
-        musicPreviewAudio.ontimeupdate = null;
+        activeMusicAudio.onended = null;
+        activeMusicAudio.ontimeupdate = null;
+        if (standbyMusicAudio) {
+            standbyMusicAudio.onended = null;
+            standbyMusicAudio.ontimeupdate = null;
+        }
 
         if (hard) {
-            musicPreviewAudio.src = '';
-            musicPreviewAudio.load();
+            activeMusicAudio.src = '';
+            activeMusicAudio.load();
+            if (standbyMusicAudio) {
+                standbyMusicAudio.src = '';
+                standbyMusicAudio.load();
+            }
         }
 
         currentlyPlayingMusicId = null;
         isForcingLoop = false;
+        isCrossfading = false;
+        activeMusicAudio = musicPreviewAudio;
+        standbyMusicAudio = musicPreviewStandby;
         stopLoopWatchdog();
         renderMusicList(musicSearchInput.value);
     }
@@ -1201,13 +1302,13 @@
         if (!currentlyPlayingMusicId) return;
         const music = musicOptions.find(opt => opt.id === currentlyPlayingMusicId);
         if (!music) return;
-        if (musicPreviewAudio && !musicPreviewAudio.paused && !musicPreviewAudio.ended) {
+        if (activeMusicAudio && !activeMusicAudio.paused && !activeMusicAudio.ended) {
             startMusicPreview(music);
         }
     }
 
     async function startMusicPreview(opt) {
-        if (!opt || !musicPreviewAudio) return;
+        if (!opt || !activeMusicAudio) return;
 
         stopMusicPreview({ hard: false });
 
@@ -1226,20 +1327,23 @@
 
         const { start } = getLoopBounds();
 
-        musicPreviewAudio.src = opt.url;
-        musicPreviewAudio.currentTime = start;
-        musicPreviewAudio.volume = musicVolume;
+        activeMusicAudio = musicPreviewAudio;
+        standbyMusicAudio = musicPreviewStandby;
 
-        musicPreviewAudio.play().catch(() => {});
+        setPreviewAudioBaseState(activeMusicAudio);
+        setPreviewAudioBaseState(standbyMusicAudio);
+        activeMusicAudio.src = opt.url;
+        if (standbyMusicAudio) standbyMusicAudio.src = opt.url;
+        activeMusicAudio.currentTime = start;
+        activeMusicAudio.volume = musicVolume;
+        if (standbyMusicAudio) {
+            standbyMusicAudio.volume = 0;
+        }
 
-        // ✅ LOOP GARANTI
-        musicPreviewAudio.ontimeupdate = () => {
-            ensureLoopPlayback('timeupdate');
-        };
+        attachLoopHandlers(activeMusicAudio);
+        attachLoopHandlers(standbyMusicAudio);
 
-        musicPreviewAudio.onended = () => {
-            ensureLoopPlayback('ended');
-        };
+        activeMusicAudio.play().catch(() => {});
 
         startLoopWatchdog();
 
