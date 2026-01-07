@@ -569,6 +569,7 @@
     const tabBtnAudio = document.getElementById('tab-btn-audio');
     let currentlyPlayingMusicId = null;
     let loopRAF = null;
+    let loopArmed = true;
     let loopWatchdogId = null;
     let isDraggingWaveform = false;
     let videoDurationSeconds = 0;
@@ -1224,13 +1225,34 @@
         const { start, end } = getLoopBounds();
         const current = activeMusicAudio.currentTime || 0;
 
-        if (current >= (end - LOOP_EPSILON)) {
+        // 🔒 Déclenchement UNIQUE
+        if (loopArmed && current >= (end - LOOP_EPSILON)) {
+            loopArmed = false;
             startSeamlessLoop(start);
             return;
         }
 
-        if (current < start) {
-            seekAudioTo(activeMusicAudio, start);
+        // 🔓 Réarmement quand on est revenu au début
+        if (!loopArmed && current < start + 0.05) {
+            loopArmed = true;
+        }
+    }
+
+    function startLoopRAF() {
+        if (loopRAF) return;
+
+        const tick = () => {
+            ensureLoopPlayback();
+            loopRAF = requestAnimationFrame(tick);
+        };
+
+        loopRAF = requestAnimationFrame(tick);
+    }
+
+    function stopLoopRAF() {
+        if (loopRAF) {
+            cancelAnimationFrame(loopRAF);
+            loopRAF = null;
         }
     }
 
@@ -1293,6 +1315,7 @@
         isCrossfading = false;
         activeMusicAudio = musicPreviewAudio;
         standbyMusicAudio = musicPreviewStandby;
+        stopLoopRAF();
         stopLoopWatchdog();
         renderMusicList(musicSearchInput.value);
     }
@@ -1301,6 +1324,7 @@
         if (!currentlyPlayingMusicId) return;
         const music = musicOptions.find(opt => opt.id === currentlyPlayingMusicId);
         if (!music) return;
+        loopArmed = true; // 🔥 RÉARMEMENT CRITIQUE
         if (activeMusicAudio && !activeMusicAudio.paused) {
             startMusicPreview(music);
         }
@@ -1342,7 +1366,9 @@
         attachLoopHandlers(activeMusicAudio);
         attachLoopHandlers(standbyMusicAudio);
 
+        loopArmed = true;
         activeMusicAudio.play().catch(() => {});
+        startLoopRAF();
 
         startLoopWatchdog();
 
