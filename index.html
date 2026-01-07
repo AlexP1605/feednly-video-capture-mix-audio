@@ -34,11 +34,11 @@
       transition: opacity 0.25s ease;
     }
 
-    video {
+    #camera-preview {
       width: 100%; height: 100%; object-fit: cover; display: block;
       transform: scaleX(1); pointer-events: none;
     }
-    video::-webkit-media-controls { display: none !important; }
+    #camera-preview::-webkit-media-controls { display: none !important; }
 
     /* --- COUNTDOWN --- */
     #countdown-display {
@@ -116,7 +116,12 @@
     #preview-overlay { position: fixed; inset: 0; z-index: 50; background: #000; display: none; opacity: 0; flex-direction: column; transition: opacity 0.2s ease; }
     #preview-overlay.active { display: flex; opacity: 1; }
     .preview-video-container { flex: 1; position: relative; overflow: hidden; border-bottom-left-radius: 24px; border-bottom-right-radius: 24px; background: #000; }
-    #preview-video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+    #preview-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      pointer-events: none;
+    }
 
     .music-overlay {
       position: absolute; left: 50%; transform: translateX(-50%);
@@ -394,6 +399,7 @@
     .tab-panel { display: none; flex-direction: column; gap: 14px; }
     .tab-panel.active { display: flex; }
     .audio-tab-title { font-size: 15px; font-weight: 800; text-align: center; margin: 4px 0; }
+    #music-filter-sheet { height: 30dvh; max-height: 30dvh; }
 
     /* --- UPLOAD --- */
     #upload-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: opacity 0.2s; }
@@ -436,11 +442,6 @@
     input[type="file"] { display: none; }
     body.showing-preview .controls { display: none !important; }
 
-    #preview-video {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
   </style>
 </head>
 <body>
@@ -564,7 +565,7 @@
                 <span class="tab-label">Waveform</span>
               </button>
               <button type="button" class="tab-btn" id="tab-btn-audio" aria-label="Son">
-                <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M216 96v64a8 8 0 0 1-16 0V96a8 8 0 0 1 16 0Zm-32-32v128a8 8 0 0 1-16 0V64a8 8 0 0 1 16 0Zm-32 24v80a8 8 0 0 1-16 0V88a8 8 0 0 1 16 0ZM96 104v48a8 8 0 0 1-16 0v-8H56a16 16 0 0 1-16-16v-16a16 16 0 0 1 16-16h24v-8a8 8 0 0 1 16 0Zm96 128H64a8 8 0 0 1 0-16h128a8 8 0 0 1 0 16Z"></path></svg>
+                <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M48 104v48h40l64 64V40l-64 64Zm130.06-14.06a8 8 0 0 0-11.32 11.32A40.08 40.08 0 0 1 176 128a40.08 40.08 0 0 1-9.26 25.74 8 8 0 1 0 12.52 10.52A56.07 56.07 0 0 0 192 128a56.07 56.07 0 0 0-13.94-38.06Z"></path></svg>
                 <span class="tab-label">Son</span>
               </button>
             </div>
@@ -1121,11 +1122,15 @@
         }
         syncVolumeLabels();
         if (previewVideo) {
-            previewVideo.volume = originalVolume;
-            if (previewVideo.muted) {
-                previewVideo.muted = false;
-            }
+            previewVideo.volume = 1;
+            previewVideo.muted = true;
         }
+        ensureAudioReady().then(() => {
+            ensurePreviewAudioGraph();
+            if (previewAudioGain) {
+                previewAudioGain.gain.value = originalVolume;
+            }
+        });
     }
 
     tabBtnMusic?.addEventListener('click', () => setActiveTab('music'));
@@ -1190,6 +1195,8 @@
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     let audioCtx = null;
     let musicEngine = null;
+    let previewAudioSource = null;
+    let previewAudioGain = null;
 
     // --- AJOUT MUSIQUE : lecteur HTML pour l'aperçu ---
 
@@ -1267,6 +1274,23 @@
         source.onended = () => {
             try { source.disconnect(); } catch (_) {}
         };
+    }
+
+    function ensurePreviewAudioGraph() {
+        if (!previewVideo || !audioCtx) return;
+        if (!previewAudioSource) {
+            try {
+                previewAudioSource = audioCtx.createMediaElementSource(previewVideo);
+            } catch (error) {
+                return;
+            }
+        }
+        if (!previewAudioGain) {
+            previewAudioGain = audioCtx.createGain();
+            previewAudioGain.gain.value = originalVolume;
+            previewAudioSource.connect(previewAudioGain);
+            previewAudioGain.connect(audioCtx.destination);
+        }
     }
 
     function createMusicEngine() {
@@ -1392,6 +1416,7 @@
         updateSeekDurationFromMeta(opt);
         renderMusicList(musicSearchInput.value);
 
+        await ensureAudioReady();
         await preloadSelectedMusic();
 
         clampStartForVideoDuration();
@@ -1399,9 +1424,10 @@
         updateWaveformProgress();
 
         const { start, end } = getLoopBounds();
-        await ensureAudioReady();
         try {
-            await musicEngine.load(opt.url);
+            if (!musicEngine.hasBuffer) {
+                await musicEngine.load(opt.url);
+            }
             musicEngine.updateVolume(musicVolume);
             const started = await musicEngine.play(start, end);
             if (!started) {
@@ -1755,8 +1781,8 @@
        if (previewObjectURL) URL.revokeObjectURL(previewObjectURL);
        previewObjectURL = URL.createObjectURL(blob);
        previewVideo.src = previewObjectURL;
-       previewVideo.muted = false;
-       previewVideo.volume = originalVolume;
+       previewVideo.muted = true;
+       previewVideo.volume = 1;
        previewVideo.loop = true;
        previewVideo.currentTime = 0;
        previewVideo.play().catch(() => {});
@@ -1771,6 +1797,12 @@
        previewOverlay.classList.add('active');
        document.body.classList.add('showing-preview');
        updateMusicSelectionUI();
+       ensureAudioReady().then(() => {
+           ensurePreviewAudioGraph();
+           if (previewAudioGain) {
+               previewAudioGain.gain.value = originalVolume;
+           }
+       });
     }
 
     function resetPreviewState() {
