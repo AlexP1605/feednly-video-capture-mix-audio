@@ -1151,19 +1151,30 @@
     }
 
     function applyOriginalVolume() {
-        const originalVolumeVal = parseFloat(originalVolumeInput.value);
-        const sanitized = clamp01(Number.isNaN(originalVolumeVal) ? 0.5 : originalVolumeVal);
+        const val = parseFloat(originalVolumeInput.value);
+        const sanitized = clamp01(Number.isNaN(val) ? 0.5 : val);
+
         originalVolume = sanitized;
-        if (originalVolumeInput.value !== String(sanitized)) {
-            originalVolumeInput.value = sanitized;
-        }
+        originalVolumeInput.value = sanitized;
         syncVolumeLabels();
-        if (previewVideo) {
-            previewVideo.volume = originalVolume;
-            if (previewVideo.muted) {
-                previewVideo.muted = false;
+
+        if (!previewVideo) return;
+
+        // 🔑 clé : forcer la prise en compte immédiate
+        const wasPaused = previewVideo.paused;
+
+        previewVideo.muted = true;
+        previewVideo.volume = sanitized;
+
+        // micro-delay pour forcer le pipeline audio à se reconfigurer
+        requestAnimationFrame(() => {
+            previewVideo.muted = false;
+            previewVideo.volume = sanitized;
+
+            if (!wasPaused && previewVideo.paused) {
+                previewVideo.play().catch(() => {});
             }
-        }
+        });
     }
 
     tabBtnMusic?.addEventListener('click', () => setActiveTab('music'));
