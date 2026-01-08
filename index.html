@@ -135,10 +135,18 @@
       background: #000;
     }
 
-    .music-overlay {
-      position: absolute; left: 50%; transform: translateX(-50%);
-      padding: 0 14px;
+    .preview-audio-controls {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
       top: calc(env(safe-area-inset-top) - 4px);
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .music-overlay {
+      padding: 0 14px;
       z-index: 10;
       display: flex; align-items: center; gap: 12px;
       background: linear-gradient(135deg, rgba(15,15,15,0.9), rgba(25,25,25,0.9));
@@ -168,6 +176,22 @@
     .music-clear:active { transform: scale(0.92); }
     .music-overlay.empty { gap: 10px; }
     .music-overlay.empty .music-clear { display: none; }
+    .preview-audio-toggle {
+      width: var(--preview-audio-control-size);
+      height: var(--preview-audio-control-size);
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(15,15,15,0.8);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      cursor: pointer;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 12px 28px rgba(0,0,0,0.35);
+      transition: transform 0.2s ease;
+    }
+    .preview-audio-toggle:active { transform: scale(0.92); }
+    .preview-audio-toggle svg { width: 22px; height: 22px; fill: currentColor; }
 
     .sheet-backdrop {
       position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0.75));
@@ -325,28 +349,28 @@
       font-size: 12px; letter-spacing: 0.3px;
       min-width: 40px; text-align: center;
     }
-    #music-volume, #original-volume {
+    #music-volume {
       --slider-hit-padding: 12px;
       -webkit-appearance: none; appearance: none; width: 100%; height: calc(8px + var(--slider-hit-padding) * 2);
       padding: var(--slider-hit-padding) 0;
       background: transparent;
       border-radius: 999px; outline: none; border: none;
     }
-    #music-volume::-webkit-slider-thumb, #original-volume::-webkit-slider-thumb {
+    #music-volume::-webkit-slider-thumb {
       -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%;
       background: #fff; border: none;
       box-shadow: 0 4px 10px rgba(0,0,0,0.35);
     }
-    #music-volume::-moz-range-thumb, #original-volume::-moz-range-thumb {
+    #music-volume::-moz-range-thumb {
       width: 18px; height: 18px; border-radius: 50%;
       background: #fff; border: none;
       box-shadow: 0 4px 10px rgba(0,0,0,0.35);
     }
-    #music-volume::-moz-range-track, #original-volume::-moz-range-track {
+    #music-volume::-moz-range-track {
       height: 8px; border-radius: 999px; background: rgba(255,255,255,0.16);
       border: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
     }
-    #music-volume::-webkit-slider-runnable-track, #original-volume::-webkit-slider-runnable-track {
+    #music-volume::-webkit-slider-runnable-track {
       height: 8px; border-radius: 999px; background: rgba(255,255,255,0.16);
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
     }
@@ -507,17 +531,22 @@
 
     <div id="preview-overlay">
       <div class="preview-video-container">
-        <div id="music-overlay" class="music-overlay hidden">
-          <div class="music-visual">
-            <svg class="music-icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M211.79 35.48a8 8 0 0 0-6.62-1.43l-96 20a8 8 0 0 0-6.54 7.86V168a28 28 0 1 0 16 25.45V121.89l80-16.67V152a28 28 0 1 0 16 25.45V43.91a8 8 0 0 0-3.38-6.63ZM88 216a12 12 0 1 1 12-12 12 12 0 0 1-12 12Zm28-106.67V79.12l80-16.67v30.22Zm80 106.67a12 12 0 1 1 12-12 12 12 0 0 1-12 12Z"></path></svg>
+        <div class="preview-audio-controls">
+          <div id="music-overlay" class="music-overlay hidden">
+            <div class="music-visual">
+              <svg class="music-icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M211.79 35.48a8 8 0 0 0-6.62-1.43l-96 20a8 8 0 0 0-6.54 7.86V168a28 28 0 1 0 16 25.45V121.89l80-16.67V152a28 28 0 1 0 16 25.45V43.91a8 8 0 0 0-3.38-6.63ZM88 216a12 12 0 1 1 12-12 12 12 0 0 1-12 12Zm28-106.67V79.12l80-16.67v30.22Zm80 106.67a12 12 0 1 1 12-12 12 12 0 0 1-12 12Z"></path></svg>
+            </div>
+            <div class="music-meta">
+              <span class="music-title"></span>
+              <span class="music-artist"></span>
+              <span class="music-duration" id="music-duration"></span>
+            </div>
+            <button type="button" id="music-clear-btn" class="music-clear" aria-label="Supprimer la musique">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M18.3 5.7a1 1 0 0 0-1.4-1.4L12 9.17 7.1 4.3a1 1 0 1 0-1.4 1.4L10.83 12l-5.13 4.9a1 1 0 0 0 1.4 1.45L12 14.83l4.9 5.12a1 1 0 0 0 1.45-1.4L13.17 12Z"/></svg>
+            </button>
           </div>
-          <div class="music-meta">
-            <span class="music-title"></span>
-            <span class="music-artist"></span>
-            <span class="music-duration" id="music-duration"></span>
-          </div>
-          <button type="button" id="music-clear-btn" class="music-clear" aria-label="Supprimer la musique">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M18.3 5.7a1 1 0 0 0-1.4-1.4L12 9.17 7.1 4.3a1 1 0 1 0-1.4 1.4L10.83 12l-5.13 4.9a1 1 0 0 0 1.4 1.45L12 14.83l4.9 5.12a1 1 0 0 0 1.45-1.4L13.17 12Z"/></svg>
+          <button type="button" id="original-mute-toggle" class="preview-audio-toggle" aria-label="Couper le son original" aria-pressed="false">
+            <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M24 104a8 8 0 0 1 8-8h40l48-48a8 8 0 0 1 13.66 5.66v144.68A8 8 0 0 1 120 206l-48-48H32a8 8 0 0 1-8-8Zm176 24a32 32 0 0 1-18.75 29.08 8 8 0 1 1-6.5-14.6 16 16 0 0 0 0-28.96 8 8 0 1 1 6.5-14.6A32 32 0 0 1 200 128Zm32 0a64 64 0 0 1-37.5 58.16 8 8 0 0 1-6.5-14.6 48 48 0 0 0 0-87.12 8 8 0 0 1 6.5-14.6A64 64 0 0 1 232 128Z"></path></svg>
           </button>
         </div>
         <video id="preview-video" playsinline webkit-playsinline loop></video>
@@ -555,13 +584,6 @@
             </div>
             <div id="tab-audio" class="tab-panel">
               <div class="timeline-row" id="volume-row">
-                <label>
-                  <div class="slider-meta">
-                    <span>Son original</span>
-                    <span class="value-chip" id="original-volume-value">50</span>
-                  </div>
-                  <input id="original-volume" type="range" min="0" max="1" step="0.01" value="0.5" />
-                </label>
                 <label>
                   <div class="slider-meta">
                     <span>Musique</span>
@@ -632,6 +654,7 @@
     const errorToast = document.getElementById('error-toast');
     const recordingTimer = document.getElementById('recording-timer');
     const musicOverlay = document.getElementById('music-overlay');
+    const originalMuteToggleBtn = document.getElementById('original-mute-toggle');
     const musicOverlayTitle = musicOverlay.querySelector('.music-title');
     const musicOverlayArtist = musicOverlay.querySelector('.music-artist');
     const musicOverlayDuration = document.getElementById('music-duration');
@@ -640,8 +663,6 @@
     const musicListEl = document.getElementById('music-list');
     const musicVolumeInput = document.getElementById('music-volume');
     const musicVolumeValue = document.getElementById('music-volume-value');
-    const originalVolumeInput = document.getElementById('original-volume');
-    const originalVolumeValue = document.getElementById('original-volume-value');
     const musicPositionLabel = document.getElementById('music-position-label');
     const musicSheet = document.getElementById('music-controls');
     const musicFilterSheet = document.getElementById('music-filter-sheet');
@@ -690,11 +711,11 @@
 
     let musicOptions = sanitizeMusicOptions(DEFAULT_MUSIC_OPTIONS);
     let musicVolume = 0.5; // Volume musique (0 → 1)
-    let originalVolume = 0.5; // Volume son original (0 → 1)
     let musicStartTime = 0; // Début sélection musique (s)
     let selectedMusicId = null; // Musique choisie pour la preview
     let currentMusicDuration = 30; // Durée connue pour le slider (s)
     let activeTag = null;
+    let isOriginalMuted = false;
     const WAVEFORM_BAR_COUNT = 32;
     const TAG_OPTIONS = ['Chill', 'Rap', 'Pop', 'Electro', 'Cinematic', 'Rock'];
 
@@ -1029,11 +1050,9 @@
         }
         selectedMusicId = null;
         musicVolume = 0.5;
-        originalVolume = 0.5;
         musicStartTime = 0;
         musicSearchInput.value = '';
         musicVolumeInput.value = musicVolume;
-        originalVolumeInput.value = originalVolume;
         syncVolumeLabels();
         setSeekLimits(currentMusicDuration);
         updateMusicOverlay();
@@ -1066,7 +1085,6 @@
         clampStartForVideoDuration();
         updatePositionLabel();
         updateWaveformProgress();
-        applyOriginalVolume();
         await preloadSelectedMusic();
         if (musicEngine) {
             musicEngine.updateVolume(musicVolume);
@@ -1074,7 +1092,6 @@
     }
 
     musicVolumeInput.oninput = updateMusicSelectionUI;
-    originalVolumeInput.oninput = applyOriginalVolume;
     if (waveformVisual) {
         waveformVisual.addEventListener('pointerdown', (e) => {
             isDraggingWaveform = true;
@@ -1142,27 +1159,38 @@
 
     function syncVolumeLabels() {
         if (musicVolumeValue) musicVolumeValue.textContent = Math.round((parseFloat(musicVolumeInput.value) || 0) * 100);
-        if (originalVolumeValue) originalVolumeValue.textContent = Math.round((parseFloat(originalVolumeInput.value) || 0) * 100);
     }
 
-    function clamp01(value) {
-        return Math.min(1, Math.max(0, value));
+    const originalVolumeIconOn = `
+      <svg viewBox="0 0 256 256" aria-hidden="true">
+        <path d="M24 104a8 8 0 0 1 8-8h40l48-48a8 8 0 0 1 13.66 5.66v144.68A8 8 0 0 1 120 206l-48-48H32a8 8 0 0 1-8-8Zm176 24a32 32 0 0 1-18.75 29.08 8 8 0 1 1-6.5-14.6 16 16 0 0 0 0-28.96 8 8 0 1 1 6.5-14.6A32 32 0 0 1 200 128Zm32 0a64 64 0 0 1-37.5 58.16 8 8 0 0 1-6.5-14.6 48 48 0 0 0 0-87.12 8 8 0 0 1 6.5-14.6A64 64 0 0 1 232 128Z"></path>
+      </svg>`;
+    const originalVolumeIconOff = `
+      <svg viewBox="0 0 256 256" aria-hidden="true">
+        <path d="M200 128a64 64 0 0 1-12.62 38.38 8 8 0 0 1-12.76-9.76 48 48 0 0 0 0-57.24 8 8 0 0 1 12.76-9.76A64 64 0 0 1 200 128Zm-88.82 56.92a8 8 0 0 1-8.86-1.72L64.69 146H32a8 8 0 0 1-8-8v-20a8 8 0 0 1 8-8h32.69l37.63-37.2A8 8 0 0 1 120 78.66v98.68a8 8 0 0 1-8.82 7.58ZM226.34 29.66a8 8 0 0 0-11.32 0L29.66 215.02a8 8 0 0 0 11.32 11.32L226.34 40.98a8 8 0 0 0 0-11.32Z"></path>
+      </svg>`;
+
+    function updateOriginalMuteButton() {
+        if (!originalMuteToggleBtn) return;
+        originalMuteToggleBtn.setAttribute('aria-pressed', String(isOriginalMuted));
+        originalMuteToggleBtn.setAttribute('aria-label', isOriginalMuted ? 'Réactiver le son original' : 'Couper le son original');
+        originalMuteToggleBtn.innerHTML = isOriginalMuted ? originalVolumeIconOff : originalVolumeIconOn;
     }
 
-    function applyOriginalVolume() {
-        const originalVolumeVal = parseFloat(originalVolumeInput.value);
-        const sanitized = clamp01(Number.isNaN(originalVolumeVal) ? 0.5 : originalVolumeVal);
-        originalVolume = sanitized;
-        if (originalVolumeInput.value !== String(sanitized)) {
-            originalVolumeInput.value = sanitized;
-        }
-        syncVolumeLabels();
+    function syncOriginalMuteState() {
         if (previewVideo) {
-            previewVideo.volume = originalVolume;
-            if (previewVideo.muted) {
-                previewVideo.muted = false;
-            }
+            previewVideo.muted = isOriginalMuted;
         }
+        updateOriginalMuteButton();
+    }
+
+    function toggleOriginalMute(force) {
+        if (typeof force === 'boolean') {
+            isOriginalMuted = force;
+        } else {
+            isOriginalMuted = !isOriginalMuted;
+        }
+        syncOriginalMuteState();
     }
 
     tabBtnMusic?.addEventListener('click', () => setActiveTab('music'));
@@ -1174,6 +1202,10 @@
     tabBtnAudio?.addEventListener('click', () => setActiveTab('audio'));
 
     musicOverlay.onclick = (e) => { e.stopPropagation(); openMusicSheet(); };
+    originalMuteToggleBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleOriginalMute();
+    });
     musicClearBtn.onclick = (e) => { e.stopPropagation(); clearMusicSelection(); };
     musicSearchInput.oninput = (e) => renderMusicList(e.target.value);
     musicFilterBtn?.addEventListener('click', (e) => {
@@ -1708,8 +1740,7 @@
        if (previewObjectURL) URL.revokeObjectURL(previewObjectURL);
        previewObjectURL = URL.createObjectURL(blob);
        previewVideo.src = previewObjectURL;
-       previewVideo.muted = false;
-       applyOriginalVolume();
+       syncOriginalMuteState();
        previewVideo.loop = true;
        previewVideo.currentTime = 0;
        previewVideo.play().catch(() => {});
@@ -1720,7 +1751,7 @@
        closeFilterSheet();
        closeMusicSheet();
 
-
+       syncOriginalMuteState();
        previewOverlay.classList.add('active');
        document.body.classList.add('showing-preview');
        updateMusicSelectionUI();
@@ -1767,7 +1798,8 @@
         restartPreviewIfPlaying();
     };
 
-    previewVideo.addEventListener('play', applyOriginalVolume);
+    previewVideo.addEventListener('play', syncOriginalMuteState);
+    previewVideo.addEventListener('pause', syncOriginalMuteState);
 
     flashBtn.onclick = toggleFlash;
     
