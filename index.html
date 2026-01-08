@@ -1132,6 +1132,7 @@
 
     function closeMusicSheet() {
         musicSheet?.classList.remove('active');
+        musicFilterSheet?.classList.remove('active');
         updateSheetBackdrop();
     }
 
@@ -1709,7 +1710,7 @@
        previewObjectURL = URL.createObjectURL(blob);
        previewVideo.src = previewObjectURL;
        previewVideo.muted = false;
-       previewVideo.volume = originalVolume;
+       applyOriginalVolume();
        previewVideo.loop = true;
        previewVideo.currentTime = 0;
        previewVideo.play().catch(() => {});
@@ -1766,6 +1767,8 @@
         updateMusicOverlay();
         restartPreviewIfPlaying();
     };
+
+    previewVideo.addEventListener('play', applyOriginalVolume);
 
     flashBtn.onclick = toggleFlash;
     
