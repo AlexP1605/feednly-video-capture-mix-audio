@@ -1924,11 +1924,24 @@
        previewVideo.currentTime = 0;
        stopMusicPreview({ hard: true });
 
+       function fail(step, detail = '') {
+          const msg = `Échec (${step})${detail ? ' : ' + detail : ''}`;
+          console.error('[UPLOAD ERROR]', step, detail);
+          uploadText.textContent = msg;
+          showError(msg);
+          setTimeout(() => uploadOverlay.classList.remove('active'), 4000);
+       }
+
        const muxUploadUrl = getUploadURL();
        uploadOverlay.classList.add('active');
        uploadText.textContent = "Préparation...";
        if(!muxUploadUrl || !recordedBlob) {
-          uploadText.textContent = "Erreur"; setTimeout(()=>uploadOverlay.classList.remove('active'), 2000); return;
+          if (!recordedBlob) {
+             fail('no-video');
+          } else {
+             fail('no-mux-upload-url');
+          }
+          return;
        }
        uploadText.textContent = "0%";
 
@@ -1952,21 +1965,36 @@
          'https://feednly-video-audio-v2-506631399204.europe-west1.run.app/process-upload',
          true
        );
+       console.log('[UPLOAD] sending request', {
+          url: xhr.responseURL || 'unknown',
+          audioMode,
+          hasMusic: !!selectedMusic,
+          blobSize: recordedBlob?.size
+       });
        xhr.upload.onprogress = e => { if(e.lengthComputable) uploadText.textContent = Math.round((e.loaded/e.total)*100) + "%"; };
        xhr.onload = () => {
           if(xhr.status < 300) {
              uploadText.textContent = "Succès";
+             let res = {};
              let assetId = '';
              try {
-                const res = JSON.parse(xhr.responseText || '{}');
+                res = JSON.parse(xhr.responseText || '{}');
                 assetId = res.asset_id || '';
-             } catch (error) {}
+             } catch (error) {
+                fail('json-parse');
+                return;
+             }
+             if (!assetId) {
+                fail('invalid-response', JSON.stringify(res));
+                return;
+             }
              notifyHost({ status: 'success', action: 'next_page', asset_id: assetId });
-          } else { uploadText.textContent = "Échec"; setTimeout(()=>uploadOverlay.classList.remove('active'), 2000); }
+          } else {
+             fail('http-error', 'status ' + xhr.status + ' – ' + xhr.responseText.slice(0,200));
+          }
        };
        xhr.onerror = () => {
-          uploadText.textContent = "Échec";
-          setTimeout(()=>uploadOverlay.classList.remove('active'), 2000);
+          fail('network-error');
        };
        xhr.send(formData);
     };
