@@ -684,6 +684,7 @@
     const tabBtnWaveform = document.getElementById('tab-btn-waveform');
     const tabBtnAudio = document.getElementById('tab-btn-audio');
     let currentlyPlayingMusicId = null;
+    let pendingMusicId = null;
     let isDraggingWaveform = false;
     let videoDurationSeconds = 0;
     cameraPreview.onloadedmetadata = () => {
@@ -969,11 +970,12 @@
             const playBtn = document.createElement('button');
             playBtn.type = 'button';
             playBtn.className = 'icon-btn';
-            const isPlayingThis = currentlyPlayingMusicId === opt.id && musicEngine?.isPlaying;
+            const isPendingThis = pendingMusicId === opt.id;
+            const isPlayingThis = currentlyPlayingMusicId === opt.id && (musicEngine?.isPlaying || isPendingThis);
             playBtn.innerHTML = isPlayingThis ? playIconPause() : playIconPlay();
             playBtn.onclick = (e) => {
                 e.stopPropagation();
-                const alreadyPlaying = currentlyPlayingMusicId === opt.id && musicEngine?.isPlaying;
+                const alreadyPlaying = currentlyPlayingMusicId === opt.id && (musicEngine?.isPlaying || pendingMusicId === opt.id);
                 if (alreadyPlaying) {
                     stopMusicPreview();
                     return;
@@ -1357,6 +1359,8 @@
         let source = null;
         let gainNode = null;
         let currentUrl = '';
+        let loadingPromise = null;
+        let loadingUrl = '';
         let isPlaying = false;
 
         const ensureContext = async () => {
@@ -1376,14 +1380,26 @@
         const load = async (url) => {
             if (!url) return null;
             if (currentUrl === url && buffer) return buffer.duration || null;
+            if (loadingPromise && loadingUrl === url) {
+                return loadingPromise;
+            }
             const ready = await ensureContext();
             if (!ready) return null;
-            const res = await fetch(url);
-            if (!res.ok) throw new Error('music fetch failed');
-            const arrayBuffer = await res.arrayBuffer();
-            buffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-            currentUrl = url;
-            return buffer.duration || null;
+            loadingUrl = url;
+            loadingPromise = (async () => {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('music fetch failed');
+                const arrayBuffer = await res.arrayBuffer();
+                buffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+                currentUrl = url;
+                return buffer.duration || null;
+            })();
+            try {
+                return await loadingPromise;
+            } finally {
+                loadingPromise = null;
+                loadingUrl = '';
+            }
         };
 
         const stop = () => {
@@ -1428,6 +1444,8 @@
         const clearBuffer = () => {
             buffer = null;
             currentUrl = '';
+            loadingPromise = null;
+            loadingUrl = '';
         };
 
         return {
@@ -1451,6 +1469,7 @@
             musicEngine.clearBuffer();
         }
         currentlyPlayingMusicId = null;
+        pendingMusicId = null;
         renderMusicList(musicSearchInput.value);
     }
 
@@ -1466,25 +1485,32 @@
     async function startMusicPreview(opt) {
         if (!opt || !musicEngine) return;
 
-        stopMusicPreview({ hard: false });
+        if (currentlyPlayingMusicId && currentlyPlayingMusicId !== opt.id) {
+            stopMusicPreview({ hard: false });
+        }
 
         selectedMusicId = opt.id;
         currentlyPlayingMusicId = opt.id;
+        pendingMusicId = opt.id;
 
         updateMusicOverlay();
         updateSeekDurationFromMeta(opt);
         renderMusicList(musicSearchInput.value);
-
-        await preloadSelectedMusic();
 
         clampStartForVideoDuration();
         updatePositionLabel();
         updateWaveformProgress();
 
         const { start, end } = getLoopBounds();
-        await ensureAudioReady();
         try {
-            await musicEngine.load(opt.url);
+            await ensureAudioReady();
+            if (audioCtx?.state === 'suspended') {
+                await audioCtx.resume().catch(() => {});
+            }
+            const duration = await musicEngine.load(opt.url);
+            if (Number.isFinite(duration)) {
+                setSeekLimits(Math.floor(duration));
+            }
             musicEngine.updateVolume(musicVolume);
             const started = await musicEngine.play(start, end);
             if (!started) {
@@ -1493,6 +1519,8 @@
         } catch (error) {
             currentlyPlayingMusicId = null;
             musicEngine.stop();
+        } finally {
+            pendingMusicId = null;
         }
 
         renderMusicList(musicSearchInput.value);
@@ -1524,6 +1552,14 @@
         if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(msg);
         else if (window.parent) window.parent.postMessage(msg, '*');
       } catch (e) {}
+    }
+
+    function getFinalAudioMode() {
+      const hasMusic = !!selectedMusicId;
+      if (!hasMusic && !isOriginalMuted) return 'original';
+      if (!hasMusic && isOriginalMuted) return 'mute';
+      if (hasMusic && isOriginalMuted) return 'music';
+      return 'music+original';
     }
 
     function getUploadURL() {
@@ -1888,26 +1924,47 @@
        previewVideo.currentTime = 0;
        stopMusicPreview({ hard: true });
 
-       const url = getUploadURL();
+       const muxUploadUrl = getUploadURL();
        uploadOverlay.classList.add('active');
        uploadText.textContent = "Préparation...";
-       if(!url || !recordedBlob) {
+       if(!muxUploadUrl || !recordedBlob) {
           uploadText.textContent = "Erreur"; setTimeout(()=>uploadOverlay.classList.remove('active'), 2000); return;
        }
        uploadText.textContent = "0%";
 
+       const selectedMusic = getSelectedMusic();
+       const audioMode = getFinalAudioMode();
+
+       const formData = new FormData();
+       formData.append('video', recordedBlob, recordedBlob.name || 'recording.mp4');
+       formData.append('facingMode', recordedFacingMode);
+       formData.append('audioMode', audioMode);
+       formData.append('muxUploadUrl', muxUploadUrl);
+       if (selectedMusic) {
+          formData.append('musicUrl', selectedMusic.url || '');
+          formData.append('musicStart', String(musicStartTime || 0));
+          formData.append('musicVolume', String(musicVolume || 0));
+       }
+
        const xhr = new XMLHttpRequest();
-       xhr.open('PUT', url, true);
-       xhr.setRequestHeader('Content-Type', recordedBlob.type);
+       xhr.open('POST', '/process-upload', true);
        xhr.upload.onprogress = e => { if(e.lengthComputable) uploadText.textContent = Math.round((e.loaded/e.total)*100) + "%"; };
        xhr.onload = () => {
           if(xhr.status < 300) {
              uploadText.textContent = "Succès";
-             const assetId = url.split('/').pop().split('?')[0];
+             let assetId = '';
+             try {
+                const res = JSON.parse(xhr.responseText || '{}');
+                assetId = res.asset_id || '';
+             } catch (error) {}
              notifyHost({ status: 'success', action: 'next_page', asset_id: assetId });
           } else { uploadText.textContent = "Échec"; setTimeout(()=>uploadOverlay.classList.remove('active'), 2000); }
        };
-       xhr.send(recordedBlob);
+       xhr.onerror = () => {
+          uploadText.textContent = "Échec";
+          setTimeout(()=>uploadOverlay.classList.remove('active'), 2000);
+       };
+       xhr.send(formData);
     };
     
     previewOverlay.onclick = async (e) => {
