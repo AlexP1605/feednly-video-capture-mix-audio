@@ -1590,7 +1590,7 @@
 
         cameraPreview.play().catch(e=>{});
         
-        cameraPreview.style.transform = "scaleX(1)";
+        cameraPreview.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
 
         torchEnabled = false;
         updateFlashUI();
@@ -1713,7 +1713,7 @@
        previewVideo.loop = true;
        previewVideo.currentTime = 0;
        previewVideo.play().catch(() => {});
-       previewVideo.style.transform = 'scaleX(1)';
+       previewVideo.style.transform = recordedFacingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
 
        // Sélection par défaut à chaque nouvelle preview
        resetMusicDefaults();
