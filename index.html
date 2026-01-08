@@ -1590,7 +1590,7 @@
 
         cameraPreview.play().catch(e=>{});
         
-        cameraPreview.style.transform = (facingMode === 'user') ? "scaleX(-1)" : "scaleX(1)";
+        cameraPreview.style.transform = "scaleX(1)";
 
         torchEnabled = false;
         updateFlashUI();
