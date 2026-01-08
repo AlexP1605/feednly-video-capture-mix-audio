@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -137,16 +138,15 @@
 
     .preview-audio-controls {
       position: absolute;
-      inset: 0;
-      z-index: 10;
-      pointer-events: none;
-    }
-    .preview-audio-controls > * { pointer-events: auto; }
-    .music-overlay {
-      position: absolute;
-      top: 50%;
       left: 50%;
-      transform: translate(-50%, -50%);
+      transform: translateX(-50%);
+      top: calc(env(safe-area-inset-top) - 4px);
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .music-overlay {
       padding: 0 14px;
       z-index: 10;
       display: flex; align-items: center; gap: 12px;
@@ -178,10 +178,6 @@
     .music-overlay.empty { gap: 10px; }
     .music-overlay.empty .music-clear { display: none; }
     .preview-audio-toggle {
-      position: absolute;
-      top: 50%;
-      right: calc(14px + env(safe-area-inset-right));
-      transform: translateY(-50%);
       width: var(--preview-audio-control-size);
       height: var(--preview-audio-control-size);
       border-radius: 50%;
@@ -591,6 +587,7 @@
               <div class="timeline-row" id="volume-row">
                 <label>
                   <div class="slider-meta">
+                    <span>Musique</span>
                     <span class="value-chip" id="music-volume-value">50</span>
                   </div>
                   <input id="music-volume" type="range" min="0" max="1" step="0.01" value="0.5" />
