@@ -138,13 +138,15 @@
 
     .preview-audio-controls {
       position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
+      left: 0;
+      right: 0;
       top: calc(env(safe-area-inset-top) - 4px);
       z-index: 10;
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 10px;
+      padding: 0 18px;
     }
     .music-overlay {
       padding: 0 14px;
@@ -190,6 +192,8 @@
       backdrop-filter: blur(14px);
       box-shadow: 0 12px 28px rgba(0,0,0,0.35);
       transition: transform 0.2s ease;
+      position: absolute;
+      right: 18px;
     }
     .preview-audio-toggle:active { transform: scale(0.92); }
     .preview-audio-toggle svg { width: 22px; height: 22px; fill: currentColor; }
@@ -584,10 +588,10 @@
               </div>
             </div>
             <div id="tab-audio" class="tab-panel">
+              <div class="audio-tab-title">Musique</div>
               <div class="timeline-row" id="volume-row">
                 <label>
                   <div class="slider-meta">
-                    <span>Musique</span>
                     <span class="value-chip" id="music-volume-value">50</span>
                   </div>
                   <input id="music-volume" type="range" min="0" max="1" step="0.01" value="0.5" />
