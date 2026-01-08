@@ -1947,7 +1947,11 @@
        }
 
        const xhr = new XMLHttpRequest();
-       xhr.open('POST', '/process-upload', true);
+       xhr.open(
+         'POST',
+         'https://feednly-video-audio-v2-506631399204.europe-west1.run.app/process-upload',
+         true
+       );
        xhr.upload.onprogress = e => { if(e.lengthComputable) uploadText.textContent = Math.round((e.loaded/e.total)*100) + "%"; };
        xhr.onload = () => {
           if(xhr.status < 300) {
