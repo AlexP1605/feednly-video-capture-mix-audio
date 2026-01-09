@@ -1997,29 +1997,25 @@
 
     async function startCamera() {
       if (uploadCompleted) return;
-      if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+      if (startCamera.isStarting) return;
       cameraReady = false;
       pendingRecordUI = false;
       document.body.classList.add('camera-starting');
       cameraPreview.style.opacity = "0";
       
-      const constraints = {
-        audio: true,
-        video: { 
-            facingMode: facingMode,
-            width: { ideal: 1920, max: 1920 },
-            height: { ideal: 1080, max: 1080 }
-        }
-      };
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        mediaStream = stream;
-
-        cameraPreview.srcObject = null;
+      if (mediaStream && mediaStream.active) {
         cameraPreview.srcObject = mediaStream;
-
         cameraPreview.play().catch(e=>{});
+
+        if (cameraPreview.readyState >= 2) {
+          cameraPreview.style.opacity = "1";
+          cameraReady = true;
+          document.body.classList.remove('camera-starting');
+          if (pendingRecordUI && isRecording) {
+              document.body.classList.add('recording');
+              pendingRecordUI = false;
+          }
+        }
         
         cameraPreview.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
 
@@ -2031,11 +2027,61 @@
            const caps = track.getCapabilities ? track.getCapabilities() : {};
            torchSupported = !!caps.torch;
            updateFlashUI();
+           if (!cameraPreview.dataset.trackSettingsLogged && track.getSettings) {
+             console.log('[camera] settings', track.getSettings());
+             cameraPreview.dataset.trackSettingsLogged = 'true';
+           }
+        }, 300);
+        return;
+      }
+
+      const constraints = {
+        audio: true,
+        video: { 
+            facingMode: facingMode,
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+        }
+      };
+
+      try {
+        startCamera.isStarting = true;
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        cameraPreview.srcObject = stream;
+        cameraPreview.play().catch(e=>{});
+        mediaStream = stream;
+
+        if (cameraPreview.readyState >= 2) {
+          cameraPreview.style.opacity = "1";
+          cameraReady = true;
+          document.body.classList.remove('camera-starting');
+          if (pendingRecordUI && isRecording) {
+              document.body.classList.add('recording');
+              pendingRecordUI = false;
+          }
+        }
+        
+        cameraPreview.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
+
+        torchEnabled = false;
+        updateFlashUI();
+        
+        setTimeout(() => {
+           const track = mediaStream.getVideoTracks()[0];
+           const caps = track.getCapabilities ? track.getCapabilities() : {};
+           torchSupported = !!caps.torch;
+           updateFlashUI();
+           if (!cameraPreview.dataset.trackSettingsLogged && track.getSettings) {
+             console.log('[camera] settings', track.getSettings());
+             cameraPreview.dataset.trackSettingsLogged = 'true';
+           }
         }, 300);
 
       } catch (error) {
         console.error(error);
         document.body.classList.remove('camera-starting');
+      } finally {
+        startCamera.isStarting = false;
       }
     }
 
