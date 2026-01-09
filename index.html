@@ -474,6 +474,7 @@
     .tab-panel { display: none; flex-direction: column; gap: 14px; }
     .tab-panel.active { display: flex; }
     .audio-tab-title { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; font-weight: 800; text-align: center; margin: 4px 0; }
+    #tab-audio .audio-tab-title { visibility: hidden; }
     .audio-tab-title svg,
     .sheet header .title svg { width: 18px; height: 18px; fill: currentColor; }
 
@@ -482,7 +483,32 @@
     #upload-overlay.active { opacity: 1; visibility: visible; }
     .spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.2); border-top: 4px solid #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    #upload-text { margin-top: 20px; color: #fff; font-weight: 600; font-size: 18px; text-align: center; line-height: 1.4; max-width: 320px; white-space: pre-line; }
+    #upload-text {
+      position: relative;
+      margin-top: 20px;
+      color: #fff;
+      font-weight: 600;
+      font-size: 18px;
+      text-align: center;
+      line-height: 1.4;
+      max-width: 320px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      white-space: pre-line;
+    }
+    #upload-text span {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.2s ease;
+    }
+    #upload-mix-text { opacity: 0; }
+    #upload-text.show-mixing #upload-progress-text { opacity: 0; }
+    #upload-text.show-mixing #upload-mix-text { opacity: 1; }
 
     /* --- ERROR TOAST --- */
     #error-toast {
@@ -667,7 +693,13 @@
     </div>
   </div>
 
-  <div id="upload-overlay"><div class="spinner"></div><div id="upload-text">Préparation...</div></div>
+  <div id="upload-overlay">
+    <div class="spinner"></div>
+    <div id="upload-text">
+      <span id="upload-progress-text">Préparation...</span>
+      <span id="upload-mix-text"></span>
+    </div>
+  </div>
   <input type="file" id="camera-input" accept="video/*" capture="environment" />
   <input type="file" id="galleryInput" accept="video/*" />
 
@@ -688,6 +720,8 @@
     const galleryInput = document.getElementById('galleryInput');
     const uploadOverlay = document.getElementById('upload-overlay');
     const uploadText = document.getElementById('upload-text');
+    const uploadProgressText = document.getElementById('upload-progress-text');
+    const uploadMixText = document.getElementById('upload-mix-text');
     const progressCircle = document.getElementById('record-progress-circle');
     const errorToast = document.getElementById('error-toast');
     const recordingTimer = document.getElementById('recording-timer');
@@ -767,18 +801,58 @@
     const WAVEFORM_BAR_COUNT = 32;
     const TAG_OPTIONS = ['Chill', 'Rap', 'Pop', 'Electro', 'Cinematic', 'Rock'];
 
-    async function preloadSelectedMusic() {
-        const music = getSelectedMusic();
-        if (!music || !music.url || !musicEngine) return null;
-        try {
-            const duration = await musicEngine.load(music.url);
-            if (Number.isFinite(duration)) {
-                setSeekLimits(Math.floor(duration));
-            }
-            return duration || null;
-        } catch (error) {
-            return null;
+    function getCachedAudioBufferEntry(id, url) {
+        if (id && audioBufferCache.has(id)) return audioBufferCache.get(id);
+        if (url && audioBufferCache.has(url)) return audioBufferCache.get(url);
+        return null;
+    }
+
+    async function preloadMusicBuffer(id, url) {
+        if (!id && !url) return null;
+        const cacheKey = url || id;
+        const existing = getCachedAudioBufferEntry(id, url);
+        if (existing?.buffer) return existing.buffer;
+        if (existing?.promise) return existing.promise;
+
+        const entry = existing || { buffer: null, promise: null, url };
+        audioBufferCache.set(cacheKey, entry);
+        if (id && id !== cacheKey) {
+            audioBufferCache.set(id, entry);
         }
+
+        entry.promise = (async () => {
+            await ensureAudioReady();
+            if (!audioCtx || !url) return null;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('music fetch failed');
+            const arrayBuffer = await res.arrayBuffer();
+            const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+            entry.buffer = decoded;
+            return decoded;
+        })();
+
+        try {
+            return await entry.promise;
+        } catch (error) {
+            audioBufferCache.delete(cacheKey);
+            if (id && id !== cacheKey) audioBufferCache.delete(id);
+            throw error;
+        } finally {
+            entry.promise = null;
+        }
+    }
+
+    function preloadSelectedMusic() {
+        const music = getSelectedMusic();
+        if (!music || !music.url || !musicEngine) return Promise.resolve(null);
+        return preloadMusicBuffer(music.id, music.url)
+            .then((buffer) => {
+                if (buffer?.duration) {
+                    setSeekLimits(Math.floor(buffer.duration));
+                }
+                return buffer?.duration || null;
+            })
+            .catch(() => null);
     }
 
     function clampVolume(value) {
@@ -809,6 +883,9 @@
     let uploadProgressValue = 0;
     let uploadProcessingRaf = null;
     let uploadCompleted = false;
+    if (uploadMixText) {
+        uploadMixText.textContent = UPLOAD_FINAL_MESSAGE;
+    }
 
     let timerDuration = 0;
     let isCountingDown = false;
@@ -846,10 +923,25 @@
     }
 
     // UX: progression en % (réelle ou estimée) pour l'overlay d'upload
+    function setUploadMixingState(isMixing) {
+        if (!uploadText) return;
+        uploadText.classList.toggle('show-mixing', Boolean(isMixing));
+    }
+
+    function setUploadStatusText(text) {
+        if (uploadProgressText) {
+            uploadProgressText.textContent = text;
+        }
+        setUploadMixingState(false);
+    }
+
     function setUploadProgress(percent) {
         const nextValue = Math.max(0, Math.min(100, Math.round(percent || 0)));
         uploadProgressValue = nextValue;
-        uploadText.textContent = `${nextValue}%`;
+        if (uploadProgressText) {
+            uploadProgressText.textContent = `${nextValue}%`;
+        }
+        setUploadMixingState(nextValue >= 95 && nextValue < 100);
     }
 
     function stopUploadProgressAnimation() {
@@ -884,7 +976,10 @@
     }
 
     function showUploadFinalizationMessage() {
-        uploadText.textContent = UPLOAD_FINAL_MESSAGE;
+        if (uploadMixText) {
+            uploadMixText.textContent = UPLOAD_FINAL_MESSAGE;
+        }
+        setUploadMixingState(true);
     }
 
     function startProcessingProgress({ target = 99, durationMs = 12000 } = {}) {
@@ -1132,7 +1227,7 @@
         }
     }
 
-    async function selectMusic(opt) {
+    function selectMusic(opt) {
         if (!opt) return;
         const hadSelection = !!getSelectedMusic();
         stopMusicPreview();
@@ -1143,9 +1238,9 @@
         updateMusicOverlay();
         updateSeekDurationFromMeta(opt);
         renderMusicList(musicSearchInput.value);
-        await ensureAudioReady();
-        await preloadSelectedMusic();
-        await updateMusicSelectionUI();
+        ensureAudioReady();
+        preloadSelectedMusic();
+        updateMusicSelectionUI();
     }
 
     function updateMusicOverlay() {
@@ -1199,27 +1294,37 @@
         updateMusicSelectionUI();
     }
 
-    const MAX_PRELOAD_ITEMS = 5;
+    const MAX_PRELOAD_ITEMS = 2;
     const visibleMusicIds = new Set();
     const preloadedMusicIds = new Set();
-    const preloadedMusicAudios = new Map();
     let musicPreloadObserver = null;
     let musicPreloadIdleHandle = null;
     let isPreloadingVisibleMusic = false;
 
+    function scheduleIdleTask(task, { timeout = 500, fallbackDelay = 120 } = {}) {
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(() => task(), { timeout });
+        } else {
+            setTimeout(() => task(), fallbackDelay);
+        }
+    }
+
     function enqueueMusicPreload(id, url) {
-        if (!id || !url || preloadedMusicIds.has(id)) return;
+        if (!id || !url || selectedMusicId) return;
+        const cached = getCachedAudioBufferEntry(id, url);
+        if (cached?.buffer || cached?.promise || preloadedMusicIds.has(id)) return;
         preloadedMusicIds.add(id);
-        const audio = new Audio();
-        audio.preload = 'auto';
-        audio.src = url;
-        audio.load();
-        preloadedMusicAudios.set(id, audio);
+        preloadMusicBuffer(id, url).catch(() => {
+            preloadedMusicIds.delete(id);
+        });
     }
 
     function processVisibleMusicPreloadQueue() {
         if (isPreloadingVisibleMusic) return;
-        const candidates = [...visibleMusicIds].filter(id => !preloadedMusicIds.has(id)).slice(0, MAX_PRELOAD_ITEMS);
+        if (selectedMusicId) return;
+        const candidates = [...visibleMusicIds]
+            .filter(id => !preloadedMusicIds.has(id))
+            .slice(0, MAX_PRELOAD_ITEMS);
         if (!candidates.length) return;
         isPreloadingVisibleMusic = true;
         const preloadNext = (deadline) => {
@@ -1243,11 +1348,7 @@
                 setTimeout(() => preloadNext(), 80);
             }
         };
-        if (typeof requestIdleCallback === 'function') {
-            requestIdleCallback(preloadNext, { timeout: 400 });
-        } else {
-            setTimeout(() => preloadNext(), 80);
-        }
+        scheduleIdleTask(() => preloadNext(), { timeout: 400, fallbackDelay: 80 });
     }
 
     function scheduleVisibleMusicPreload() {
@@ -1308,13 +1409,13 @@
     loadMusicCatalog();
     renderFilterTags();
 
-    async function updateMusicSelectionUI() {
+    function updateMusicSelectionUI() {
         const volumeVal = parseFloat(musicVolumeInput.value);
         applyMusicVolume(Number.isNaN(volumeVal) ? 0.5 : volumeVal);
         clampStartForVideoDuration();
         updatePositionLabel();
         updateWaveformProgress();
-        await preloadSelectedMusic();
+        scheduleIdleTask(() => preloadSelectedMusic());
     }
 
     musicVolumeInput.oninput = updateMusicSelectionUI;
@@ -1489,6 +1590,7 @@
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     let audioCtx = null;
     let musicEngine = null;
+    const audioBufferCache = new Map();
 
     // --- AJOUT MUSIQUE : lecteur HTML pour l'aperçu ---
 
@@ -1597,23 +1699,38 @@
             return true;
         };
 
-        const load = async (url) => {
+        const load = async (url, { id } = {}) => {
             if (!url) return null;
             if (currentUrl === url && buffer) return buffer.duration || null;
             if (loadingPromise && loadingUrl === url) {
                 return loadingPromise;
             }
+            const cached = getCachedAudioBufferEntry(id, url);
+            if (cached?.buffer) {
+                buffer = cached.buffer;
+                currentUrl = url;
+                return buffer.duration || null;
+            }
+            if (cached?.promise) {
+                const cachedBuffer = await cached.promise;
+                if (cachedBuffer) {
+                    buffer = cachedBuffer;
+                    currentUrl = url;
+                    return buffer.duration || null;
+                }
+            }
             const ready = await ensureContext();
             if (!ready) return null;
             loadingUrl = url;
-            loadingPromise = (async () => {
-                const res = await fetch(url);
-                if (!res.ok) throw new Error('music fetch failed');
-                const arrayBuffer = await res.arrayBuffer();
-                buffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-                currentUrl = url;
-                return buffer.duration || null;
-            })();
+            loadingPromise = preloadMusicBuffer(id || url, url)
+                .then((decoded) => {
+                    if (decoded) {
+                        buffer = decoded;
+                        currentUrl = url;
+                        return buffer.duration || null;
+                    }
+                    return null;
+                });
             try {
                 return await loadingPromise;
             } finally {
@@ -1727,7 +1844,7 @@
             if (audioCtx?.state === 'suspended') {
                 await audioCtx.resume().catch(() => {});
             }
-            const duration = await musicEngine.load(opt.url);
+            const duration = await musicEngine.load(opt.url, { id: opt.id });
             if (Number.isFinite(duration)) {
                 setSeekLimits(Math.floor(duration));
             }
@@ -2217,7 +2334,7 @@
               clearTimeout(uploadPhaseTimeout);
               uploadPhaseTimeout = null;
           }
-          uploadText.textContent = msg;
+          setUploadStatusText(msg);
           showError(msg);
           setTimeout(() => uploadOverlay.classList.remove('active'), 4000);
        }
@@ -2234,7 +2351,7 @@
 
        const muxUploadUrl = getUploadURL();
        uploadOverlay.classList.add('active');
-       uploadText.textContent = "Préparation...";
+       setUploadStatusText("Préparation...");
        if(!muxUploadUrl || !recordedBlob) {
           if (!recordedBlob) {
              fail('no-video');
