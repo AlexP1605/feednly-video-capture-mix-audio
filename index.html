@@ -618,7 +618,7 @@
             <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M24 104a8 8 0 0 1 8-8h40l48-48a8 8 0 0 1 13.66 5.66v144.68A8 8 0 0 1 120 206l-48-48H32a8 8 0 0 1-8-8Zm176 24a32 32 0 0 1-18.75 29.08 8 8 0 1 1-6.5-14.6 16 16 0 0 0 0-28.96 8 8 0 1 1 6.5-14.6A32 32 0 0 1 200 128Zm32 0a64 64 0 0 1-37.5 58.16 8 8 0 0 1-6.5-14.6 48 48 0 0 0 0-87.12 8 8 0 0 1 6.5-14.6A64 64 0 0 1 232 128Z"></path></svg>
           </button>
         </div>
-        <video id="preview-video" playsinline webkit-playsinline loop></video>
+        <video id="preview-video" playsinline webkit-playsinline loop preload="auto"></video>
       </div>
       <div id="sheet-backdrop" class="sheet-backdrop"></div>
         <div id="music-controls" class="sheet">
@@ -2162,10 +2162,26 @@
        lockPreviewViewport();
        previewVideo.src = previewObjectURL;
        syncOriginalMuteState();
+       previewVideo.preload = 'auto';
        previewVideo.loop = true;
        previewVideo.currentTime = 0;
-       previewVideo.play().catch(() => {});
        previewVideo.style.transform = recordedFacingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
+       let previewActivated = false;
+       previewVideo.oncanplay = () => {
+          if (previewActivated) return;
+          previewActivated = true;
+          previewVideo.oncanplay = null;
+          requestAnimationFrame(() => {
+             previewOverlay.classList.add('active');
+             document.body.classList.add('showing-preview');
+             previewVideo.play().catch(() => {});
+          });
+       };
+       if (previewVideo.readyState >= 3) {
+          previewVideo.oncanplay?.();
+       } else {
+          previewVideo.load();
+       }
 
        // Sélection par défaut à chaque nouvelle preview
        resetMusicDefaults();
@@ -2173,8 +2189,6 @@
        closeMusicSheet();
 
        syncOriginalMuteState();
-       previewOverlay.classList.add('active');
-       document.body.classList.add('showing-preview');
        updateMusicSelectionUI();
     }
 
