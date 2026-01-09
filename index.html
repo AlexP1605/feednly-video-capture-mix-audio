@@ -327,7 +327,10 @@
       display: grid;
       place-items: center;
       transition: transform 0.2s ease;
+      min-width: 40px;
+      min-height: 36px;
     }
+    .icon-btn svg { width: 20px; height: 20px; display: block; }
     /* UX: état de chargement immédiat pour l'aperçu musique */
     .icon-btn.loading {
       position: relative;
@@ -804,6 +807,8 @@
     const UPLOAD_FINAL_MESSAGE = 'Mixage de l’audio avec la vidéo\nCette opération peut prendre quelques instants selon votre connexion';
     let uploadProgressRaf = null;
     let uploadProgressValue = 0;
+    let uploadProcessingRaf = null;
+    let uploadCompleted = false;
 
     let timerDuration = 0;
     let isCountingDown = false;
@@ -852,6 +857,11 @@
         uploadProgressRaf = null;
     }
 
+    function stopProcessingProgressAnimation() {
+        if (uploadProcessingRaf) cancelAnimationFrame(uploadProcessingRaf);
+        uploadProcessingRaf = null;
+    }
+
     // UX: estimation progressive pour l'upload direct Mux sans accès aux bytes réels
     function startEstimatedUploadProgress(blobSize = 0) {
         stopUploadProgressAnimation();
@@ -875,6 +885,22 @@
 
     function showUploadFinalizationMessage() {
         uploadText.textContent = UPLOAD_FINAL_MESSAGE;
+    }
+
+    function startProcessingProgress({ target = 99, durationMs = 12000 } = {}) {
+        stopProcessingProgressAnimation();
+        const startValue = uploadProgressValue;
+        const startTime = performance.now();
+        const tick = (now) => {
+            const ratio = Math.min(1, (now - startTime) / durationMs);
+            const eased = 1 - Math.pow(1 - ratio, 2);
+            const nextValue = startValue + (target - startValue) * eased;
+            setUploadProgress(nextValue);
+            if (ratio < 1) {
+                uploadProcessingRaf = requestAnimationFrame(tick);
+            }
+        };
+        uploadProcessingRaf = requestAnimationFrame(tick);
     }
 
     function clampStartForVideoDuration() {
@@ -1037,11 +1063,15 @@
             empty.style.textAlign = 'center';
             empty.style.padding = '12px';
             musicListEl.appendChild(empty);
+            setupMusicPreloadObserver();
             return;
         }
+        const fragment = document.createDocumentFragment();
         items.forEach(opt => {
             const item = document.createElement('div');
             item.className = 'music-item' + (opt.id === selectedMusicId ? ' active' : '');
+            item.dataset.musicId = String(opt.id || '');
+            item.dataset.musicUrl = opt.url || '';
             const cover = document.createElement('div');
             cover.className = 'music-list-cover';
             cover.style.backgroundImage = opt.cover ? `url(${opt.cover})` : '';
@@ -1089,8 +1119,10 @@
                 e.stopPropagation();
                 selectMusic(opt);
             };
-            musicListEl.appendChild(item);
+            fragment.appendChild(item);
         });
+        musicListEl.appendChild(fragment);
+        setupMusicPreloadObserver();
     }
 
     function updateSeekDurationFromMeta(opt) {
@@ -1165,6 +1197,96 @@
         updateMusicOverlay();
         renderMusicList(musicSearchInput.value);
         updateMusicSelectionUI();
+    }
+
+    const MAX_PRELOAD_ITEMS = 5;
+    const visibleMusicIds = new Set();
+    const preloadedMusicIds = new Set();
+    const preloadedMusicAudios = new Map();
+    let musicPreloadObserver = null;
+    let musicPreloadIdleHandle = null;
+    let isPreloadingVisibleMusic = false;
+
+    function enqueueMusicPreload(id, url) {
+        if (!id || !url || preloadedMusicIds.has(id)) return;
+        preloadedMusicIds.add(id);
+        const audio = new Audio();
+        audio.preload = 'auto';
+        audio.src = url;
+        audio.load();
+        preloadedMusicAudios.set(id, audio);
+    }
+
+    function processVisibleMusicPreloadQueue() {
+        if (isPreloadingVisibleMusic) return;
+        const candidates = [...visibleMusicIds].filter(id => !preloadedMusicIds.has(id)).slice(0, MAX_PRELOAD_ITEMS);
+        if (!candidates.length) return;
+        isPreloadingVisibleMusic = true;
+        const preloadNext = (deadline) => {
+            if (!candidates.length) {
+                isPreloadingVisibleMusic = false;
+                return;
+            }
+            if (deadline && typeof deadline.timeRemaining === 'function' && deadline.timeRemaining() < 6) {
+                isPreloadingVisibleMusic = false;
+                scheduleVisibleMusicPreload();
+                return;
+            }
+            const id = candidates.shift();
+            const opt = musicOptions.find(opt => String(opt.id) === id);
+            if (opt?.url) {
+                enqueueMusicPreload(id, opt.url);
+            }
+            if (typeof requestIdleCallback === 'function') {
+                requestIdleCallback(preloadNext, { timeout: 400 });
+            } else {
+                setTimeout(() => preloadNext(), 80);
+            }
+        };
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(preloadNext, { timeout: 400 });
+        } else {
+            setTimeout(() => preloadNext(), 80);
+        }
+    }
+
+    function scheduleVisibleMusicPreload() {
+        if (musicPreloadIdleHandle) return;
+        if (typeof requestIdleCallback === 'function') {
+            musicPreloadIdleHandle = requestIdleCallback(() => {
+                musicPreloadIdleHandle = null;
+                processVisibleMusicPreloadQueue();
+            }, { timeout: 500 });
+        } else {
+            musicPreloadIdleHandle = setTimeout(() => {
+                musicPreloadIdleHandle = null;
+                processVisibleMusicPreloadQueue();
+            }, 120);
+        }
+    }
+
+    function setupMusicPreloadObserver() {
+        if (!musicListEl) return;
+        if (!musicPreloadObserver) {
+            musicPreloadObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    const id = entry.target.dataset.musicId;
+                    if (!id) return;
+                    if (entry.isIntersecting) {
+                        visibleMusicIds.add(id);
+                    } else {
+                        visibleMusicIds.delete(id);
+                    }
+                });
+                scheduleVisibleMusicPreload();
+            }, { root: musicListEl, threshold: 0.45 });
+        } else {
+            musicPreloadObserver.disconnect();
+        }
+        visibleMusicIds.clear();
+        const items = musicListEl.querySelectorAll('.music-item');
+        items.forEach(item => musicPreloadObserver.observe(item));
+        scheduleVisibleMusicPreload();
     }
 
     async function loadMusicCatalog() {
@@ -1388,7 +1510,8 @@
                 !mediaStream &&
                 !isRecording &&
                 !isCountingDown &&
-                !previewOverlay.classList.contains('active')
+                !previewOverlay.classList.contains('active') &&
+                !uploadCompleted
             ) {
                 startCamera();
             }
@@ -1751,6 +1874,7 @@
     }
 
     async function startCamera() {
+      if (uploadCompleted) return;
       if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
       cameraReady = false;
       pendingRecordUI = false;
@@ -1954,7 +2078,7 @@
        unlockPreviewViewport();
        resetPreviewState();
 
-       if (!mediaStream || !mediaStream.active) {
+       if (!uploadCompleted && (!mediaStream || !mediaStream.active)) {
            startCamera();
        }
     }
@@ -2060,6 +2184,7 @@
        stopMusicPreview({ hard: true });
        let uploadPhaseTimeout = null;
        let uploadSuccessNotified = false;
+       let processingStarted = false;
 
        function resetAfterUploadSuccess() {
           if (uploadPhaseTimeout) {
@@ -2067,21 +2192,27 @@
               uploadPhaseTimeout = null;
           }
           stopUploadProgressAnimation();
-          setUploadProgress(0);
-          uploadText.textContent = "Préparation...";
-          uploadOverlay.classList.remove('active');
+          stopProcessingProgressAnimation();
+          setUploadProgress(100);
+          showUploadFinalizationMessage();
+          uploadCompleted = true;
           previewOverlay.classList.remove('active');
           document.body.classList.remove('showing-preview');
           unlockPreviewViewport();
           resetPreviewState();
           recordedChunks = [];
           pendingRecordUI = false;
+          if (mediaStream) {
+              mediaStream.getTracks().forEach(track => track.stop());
+              mediaStream = null;
+          }
        }
 
        function fail(step, detail = '') {
           const msg = `Échec (${step})${detail ? ' : ' + detail : ''}`;
           console.error('[UPLOAD ERROR]', step, detail);
           stopUploadProgressAnimation();
+          stopProcessingProgressAnimation();
           if (uploadPhaseTimeout) {
               clearTimeout(uploadPhaseTimeout);
               uploadPhaseTimeout = null;
@@ -2094,6 +2225,9 @@
        function handleUploadSuccess(assetId) {
           if (!assetId || uploadSuccessNotified) return;
           uploadSuccessNotified = true;
+          stopProcessingProgressAnimation();
+          setUploadProgress(100);
+          showUploadFinalizationMessage();
           notifyHost({ status: 'success', action: 'next_page', asset_id: assetId });
           resetAfterUploadSuccess();
        }
@@ -2143,23 +2277,26 @@
             hasMusic: !!selectedMusic,
             blobSize: recordedBlob?.size
          });
-         xhr.upload.onprogress = e => {
-            if (!e.lengthComputable) return;
-            const percent = Math.round((e.loaded / e.total) * 100);
-            if (percent < 100) {
+       xhr.upload.onprogress = e => {
+           if (!e.lengthComputable) return;
+            const percent = Math.round((e.loaded / e.total) * 70);
+            if (percent < 70) {
                 setUploadProgress(percent);
                 return;
             }
-            showUploadFinalizationMessage();
-         };
-         xhr.onload = () => {
+            setUploadProgress(70);
+            if (!processingStarted) {
+                processingStarted = true;
+                startProcessingProgress({ target: 99, durationMs: 14000 });
+            }
+        };
+        xhr.onload = () => {
             if(xhr.status < 300) {
                if (uploadPhaseTimeout) {
                   clearTimeout(uploadPhaseTimeout);
                   uploadPhaseTimeout = null;
                }
                stopUploadProgressAnimation();
-               uploadText.textContent = "Succès";
                let res = {};
                let assetId = '';
                try {
@@ -2202,7 +2339,7 @@
          if (!uploadRes.ok) {
            throw new Error(`Mux upload failed: ${uploadRes.status}`);
          }
-         showUploadFinalizationMessage();
+         startProcessingProgress({ target: 99, durationMs: 4000 });
          const assetId = buildAssetId(muxUploadUrl);
          if (!assetId) {
            throw new Error('invalid mux upload url');
@@ -2217,7 +2354,6 @@
                 clearTimeout(uploadPhaseTimeout);
                 uploadPhaseTimeout = null;
              }
-             uploadText.textContent = "Succès";
              handleUploadSuccess(assetId);
              return;
           } catch (error) {
