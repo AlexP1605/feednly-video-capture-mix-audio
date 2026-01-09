@@ -112,7 +112,18 @@
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.5); } 70% { box-shadow: 0 0 0 15px rgba(255, 59, 48, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); } }
 
     /* --- PREVIEW UI --- */
-    #preview-overlay { position: fixed; inset: 0; z-index: 50; background: #000; display: none; opacity: 0; flex-direction: column; transition: opacity 0.2s ease; }
+    #preview-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: #000;
+      display: none;
+      opacity: 0;
+      flex-direction: column;
+      transition: opacity 0.2s ease;
+      width: var(--preview-viewport-width, 100%);
+      height: var(--preview-viewport-height, 100dvh);
+    }
     #preview-overlay.active { display: flex; opacity: 1; }
     .preview-video-container {
       aspect-ratio: 9 / 16;
@@ -316,6 +327,21 @@
       display: grid;
       place-items: center;
       transition: transform 0.2s ease;
+    }
+    /* UX: état de chargement immédiat pour l'aperçu musique */
+    .icon-btn.loading {
+      position: relative;
+      cursor: default;
+    }
+    .icon-btn.loading svg { opacity: 0; }
+    .icon-btn.loading::after {
+      content: '';
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
     }
     .icon-btn:active { transform: scale(0.95); }
     .icon-btn:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -690,6 +716,12 @@
     cameraPreview.onloadedmetadata = () => {
       cameraPreview.style.objectFit = "cover";
       cameraPreview.style.opacity = "1"; // garantir affichage plein écran
+      cameraReady = true;
+      document.body.classList.remove('camera-starting');
+      if (pendingRecordUI && isRecording) {
+          document.body.classList.add('recording');
+          pendingRecordUI = false;
+      }
     };
 
     let mediaStream = null;
@@ -698,6 +730,9 @@
     let isRecording = false;
     let recordedBlob = null;
     let previewObjectURL = null;
+    // UX: garder l'UI stable le temps que la caméra soit prête
+    let cameraReady = false;
+    let pendingRecordUI = false;
 
     // --- AJOUT MUSIQUE (prévisualisation uniquement) : catalogue et configuration ---
     const DEFAULT_MUSIC_OPTIONS = [
@@ -761,6 +796,10 @@
     let torchSupported = false;
     let torchEnabled = false;
     let uploadURL = '';
+    // UX: texte unifié + progression estimée pour l'upload
+    const UPLOAD_FINAL_MESSAGE = 'Finalisation (cela peut prendre quelques instants)';
+    let uploadProgressRaf = null;
+    let uploadProgressValue = 0;
 
     let timerDuration = 0;
     let isCountingDown = false;
@@ -795,6 +834,43 @@
         const m = Math.floor(totalSeconds / 60).toString();
         const s = (totalSeconds % 60).toString().padStart(2, '0');
         return `${m}:${s}`;
+    }
+
+    // UX: progression en % (réelle ou estimée) pour l'overlay d'upload
+    function setUploadProgress(percent) {
+        const nextValue = Math.max(0, Math.min(100, Math.round(percent || 0)));
+        uploadProgressValue = nextValue;
+        uploadText.textContent = `${nextValue}%`;
+    }
+
+    function stopUploadProgressAnimation() {
+        if (uploadProgressRaf) cancelAnimationFrame(uploadProgressRaf);
+        uploadProgressRaf = null;
+    }
+
+    // UX: estimation progressive pour l'upload direct Mux sans accès aux bytes réels
+    function startEstimatedUploadProgress(blobSize = 0) {
+        stopUploadProgressAnimation();
+        const minMs = 4500;
+        const maxMs = 20000;
+        const bytesPerSecond = 900000;
+        const estimatedMs = Math.min(
+            maxMs,
+            Math.max(minMs, Math.round((blobSize / bytesPerSecond) * 1000))
+        );
+        const startTime = performance.now();
+        const maxPercent = 90;
+        const tick = (now) => {
+            const ratio = Math.min(1, (now - startTime) / estimatedMs);
+            const eased = 1 - Math.pow(1 - ratio, 2);
+            setUploadProgress(Math.min(maxPercent, Math.floor(eased * maxPercent)));
+            if (ratio < 1) uploadProgressRaf = requestAnimationFrame(tick);
+        };
+        uploadProgressRaf = requestAnimationFrame(tick);
+    }
+
+    function showUploadFinalizationMessage() {
+        uploadText.textContent = UPLOAD_FINAL_MESSAGE;
     }
 
     function clampStartForVideoDuration() {
@@ -990,6 +1066,11 @@
             const isPendingThis = pendingMusicId === opt.id;
             const isPlayingThis = currentlyPlayingMusicId === opt.id && (musicEngine?.isPlaying || isPendingThis);
             playBtn.innerHTML = isPlayingThis ? playIconPause() : playIconPlay();
+            if (isPendingThis) {
+                playBtn.classList.add('loading');
+                playBtn.disabled = true;
+                playBtn.setAttribute('aria-busy', 'true');
+            }
             playBtn.onclick = (e) => {
                 e.stopPropagation();
                 const alreadyPlaying = currentlyPlayingMusicId === opt.id && (musicEngine?.isPlaying || pendingMusicId === opt.id);
@@ -1667,6 +1748,10 @@
 
     async function startCamera() {
       if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+      cameraReady = false;
+      pendingRecordUI = false;
+      document.body.classList.add('camera-starting');
+      cameraPreview.style.opacity = "0";
       
       const constraints = {
         audio: true,
@@ -1698,7 +1783,10 @@
            updateFlashUI();
         }, 300);
 
-      } catch (error) { console.error(error); }
+      } catch (error) {
+        console.error(error);
+        document.body.classList.remove('camera-starting');
+      }
     }
 
     // --- LOGIQUE BOUTON ROBUSTE ---
@@ -1757,7 +1845,11 @@
       
       mediaRecorder.start();
       isRecording = true;
-      document.body.classList.add('recording');
+      if (cameraReady) {
+         document.body.classList.add('recording');
+      } else {
+         pendingRecordUI = true;
+      }
       
       recordingStartTime = Date.now();
       if (recordingTimer) {
@@ -1790,6 +1882,7 @@
     function finalizeRecording() {
        if(progressInterval) cancelAnimationFrame(progressInterval);
        document.body.classList.remove('recording');
+       pendingRecordUI = false;
        progressCircle.style.strokeDashoffset = circumference;
        if (torchEnabled) toggleFlash();
        if (recordingTimer) {
@@ -1800,9 +1893,23 @@
        previewTimeout = setTimeout(() => { if(recordedBlob) showPreview(recordedBlob); }, 100);
     }
 
+    // UX: figer le viewport pour éviter les recalculs de hauteur visibles
+    function lockPreviewViewport() {
+       const height = window.innerHeight;
+       const width = window.innerWidth;
+       previewOverlay.style.setProperty('--preview-viewport-height', `${height}px`);
+       previewOverlay.style.setProperty('--preview-viewport-width', `${width}px`);
+    }
+
+    function unlockPreviewViewport() {
+       previewOverlay.style.removeProperty('--preview-viewport-height');
+       previewOverlay.style.removeProperty('--preview-viewport-width');
+    }
+
     function showPreview(blob) {
        if (previewObjectURL) URL.revokeObjectURL(previewObjectURL);
        previewObjectURL = URL.createObjectURL(blob);
+       lockPreviewViewport();
        previewVideo.src = previewObjectURL;
        syncOriginalMuteState();
        previewVideo.loop = true;
@@ -1840,6 +1947,7 @@
     function hidePreview() {
        previewOverlay.classList.remove('active');
        document.body.classList.remove('showing-preview');
+       unlockPreviewViewport();
        resetPreviewState();
 
        if (!mediaStream || !mediaStream.active) {
@@ -1951,6 +2059,7 @@
        function fail(step, detail = '') {
           const msg = `Échec (${step})${detail ? ' : ' + detail : ''}`;
           console.error('[UPLOAD ERROR]', step, detail);
+          stopUploadProgressAnimation();
           if (uploadPhaseTimeout) {
               clearTimeout(uploadPhaseTimeout);
               uploadPhaseTimeout = null;
@@ -1971,7 +2080,7 @@
           }
           return;
        }
-       uploadText.textContent = "0%";
+       setUploadProgress(0);
 
        const selectedMusic = getSelectedMusic();
        const audioMode = getFinalAudioMode();
@@ -2009,17 +2118,10 @@
             if (!e.lengthComputable) return;
             const percent = Math.round((e.loaded / e.total) * 100);
             if (percent < 100) {
-                uploadText.textContent = `${percent}%`;
+                setUploadProgress(percent);
                 return;
             }
-            if (uploadText.textContent === 'Traitement…' || uploadText.textContent === 'Envoi Mux…') return;
-            uploadText.textContent = 'Traitement…';
-            if (uploadPhaseTimeout) clearTimeout(uploadPhaseTimeout);
-            uploadPhaseTimeout = setTimeout(() => {
-                if (uploadOverlay.classList.contains('active') && uploadText.textContent === 'Traitement…') {
-                    uploadText.textContent = 'Envoi Mux…';
-                }
-            }, 1500);
+            showUploadFinalizationMessage();
          };
          xhr.onload = () => {
             if(xhr.status < 300) {
@@ -2027,6 +2129,7 @@
                   clearTimeout(uploadPhaseTimeout);
                   uploadPhaseTimeout = null;
                }
+               stopUploadProgressAnimation();
                uploadText.textContent = "Succès";
                let res = {};
                let assetId = '';
@@ -2059,16 +2162,18 @@
            hasMusic: !!selectedMusicId,
            isOriginalMuted
          });
-         uploadText.textContent = 'Envoi Mux…';
+         startEstimatedUploadProgress(recordedBlob?.size || 0);
          const uploadRes = await fetch(muxUploadUrl, {
            method: 'PUT',
            headers: { 'Content-Type': 'video/mp4' },
            body: recordedBlob,
            duplex: 'half'
          });
+         stopUploadProgressAnimation();
          if (!uploadRes.ok) {
            throw new Error(`Mux upload failed: ${uploadRes.status}`);
          }
+         showUploadFinalizationMessage();
          const assetId = buildAssetId(muxUploadUrl);
          if (!assetId) {
            throw new Error('invalid mux upload url');
@@ -2088,7 +2193,8 @@
              return;
           } catch (error) {
              console.warn('[FAST_PATH_DIRECT_MUX] fallback to server', error);
-             uploadText.textContent = "0%";
+             stopUploadProgressAnimation();
+             setUploadProgress(0);
           }
        }
 
