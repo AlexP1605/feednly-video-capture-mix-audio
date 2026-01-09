@@ -738,6 +738,23 @@
             return null;
         }
     }
+
+    function clampVolume(value) {
+        return Math.min(1, Math.max(0, value));
+    }
+
+    function applyMusicVolume(value, { syncInput = true, updateEngine = true } = {}) {
+        const clamped = clampVolume(Number.isFinite(value) ? value : 0.5);
+        musicVolume = clamped;
+        if (syncInput && musicVolumeInput) {
+            musicVolumeInput.value = String(clamped);
+        }
+        syncVolumeLabels();
+        if (updateEngine && musicEngine) {
+            musicEngine.updateVolume(clamped);
+        }
+        return clamped;
+    }
     
     let facingMode = 'environment';
     let recordedFacingMode = 'environment';
@@ -1004,11 +1021,12 @@
         stopMusicPreview();
         selectedMusicId = opt.id;
         if (!hadSelection && parseFloat(musicVolumeInput.value || '0') === 0) {
-            musicVolumeInput.value = 0.5;
+            applyMusicVolume(0.5);
         }
         updateMusicOverlay();
         updateSeekDurationFromMeta(opt);
         renderMusicList(musicSearchInput.value);
+        await ensureAudioReady();
         await preloadSelectedMusic();
         await updateMusicSelectionUI();
     }
@@ -1020,8 +1038,7 @@
             musicOverlayTitle.textContent = 'Ajouter un son';
             musicOverlayArtist.textContent = '';
             musicOverlayDuration.textContent = '';
-            musicVolume = 0.5;
-            musicVolumeInput.value = musicVolume;
+            applyMusicVolume(0.5);
             syncVolumeLabels();
             musicOverlay.classList.remove('hidden');
             buildWaveformBars();
@@ -1041,8 +1058,7 @@
     function clearMusicSelection() {
         selectedMusicId = null;
         musicStartTime = 0;
-        musicVolume = 0.5;
-        musicVolumeInput.value = musicVolume;
+        applyMusicVolume(0.5);
         updatePositionLabel();
         syncVolumeLabels();
         renderMusicList(musicSearchInput.value);
@@ -1056,10 +1072,9 @@
             musicOptions = [...DEFAULT_MUSIC_OPTIONS];
         }
         selectedMusicId = null;
-        musicVolume = 0.5;
+        applyMusicVolume(0.5, { updateEngine: false });
         musicStartTime = 0;
         musicSearchInput.value = '';
-        musicVolumeInput.value = musicVolume;
         syncVolumeLabels();
         setSeekLimits(currentMusicDuration);
         updateMusicOverlay();
@@ -1088,14 +1103,11 @@
 
     async function updateMusicSelectionUI() {
         const volumeVal = parseFloat(musicVolumeInput.value);
-        musicVolume = Number.isNaN(volumeVal) ? 0.5 : volumeVal;
+        applyMusicVolume(Number.isNaN(volumeVal) ? 0.5 : volumeVal);
         clampStartForVideoDuration();
         updatePositionLabel();
         updateWaveformProgress();
         await preloadSelectedMusic();
-        if (musicEngine) {
-            musicEngine.updateVolume(musicVolume);
-        }
     }
 
     musicVolumeInput.oninput = updateMusicSelectionUI;
@@ -1437,7 +1449,7 @@
 
         const updateVolume = (value) => {
             if (gainNode) {
-                gainNode.gain.value = value;
+                gainNode.gain.value = clampVolume(value);
             }
         };
 
@@ -1512,6 +1524,9 @@
                 setSeekLimits(Math.floor(duration));
             }
             musicEngine.updateVolume(musicVolume);
+            if (audioCtx && audioCtx.state === 'suspended') {
+                await audioCtx.resume().catch(() => {});
+            }
             const started = await musicEngine.play(start, end);
             if (!started) {
                 currentlyPlayingMusicId = null;
@@ -1923,10 +1938,15 @@
        previewVideo.pause();
        previewVideo.currentTime = 0;
        stopMusicPreview({ hard: true });
+       let uploadPhaseTimeout = null;
 
        function fail(step, detail = '') {
           const msg = `Échec (${step})${detail ? ' : ' + detail : ''}`;
           console.error('[UPLOAD ERROR]', step, detail);
+          if (uploadPhaseTimeout) {
+              clearTimeout(uploadPhaseTimeout);
+              uploadPhaseTimeout = null;
+          }
           uploadText.textContent = msg;
           showError(msg);
           setTimeout(() => uploadOverlay.classList.remove('active'), 4000);
@@ -1971,9 +1991,28 @@
           hasMusic: !!selectedMusic,
           blobSize: recordedBlob?.size
        });
-       xhr.upload.onprogress = e => { if(e.lengthComputable) uploadText.textContent = Math.round((e.loaded/e.total)*100) + "%"; };
+       xhr.upload.onprogress = e => {
+          if (!e.lengthComputable) return;
+          const percent = Math.round((e.loaded / e.total) * 100);
+          if (percent < 100) {
+              uploadText.textContent = `${percent}%`;
+              return;
+          }
+          if (uploadText.textContent === 'Traitement vidéo…' || uploadText.textContent === 'Finalisation…') return;
+          uploadText.textContent = 'Traitement vidéo…';
+          if (uploadPhaseTimeout) clearTimeout(uploadPhaseTimeout);
+          uploadPhaseTimeout = setTimeout(() => {
+              if (uploadOverlay.classList.contains('active') && uploadText.textContent === 'Traitement vidéo…') {
+                  uploadText.textContent = 'Finalisation…';
+              }
+          }, 1500);
+       };
        xhr.onload = () => {
           if(xhr.status < 300) {
+             if (uploadPhaseTimeout) {
+                clearTimeout(uploadPhaseTimeout);
+                uploadPhaseTimeout = null;
+             }
              uploadText.textContent = "Succès";
              let res = {};
              let assetId = '';
