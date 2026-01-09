@@ -201,10 +201,21 @@ app.post('/process-upload', upload.single('video'), async (req, res) => {
 
     await runFfmpeg(args);
 
-    const uploadRes = await fetch(muxUploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'video/mp4' },
-      body: fs.createReadStream(outputPath)
+    if (!fs.existsSync(outputPath)) {
+      throw new Error('FFmpeg failed: output file was not created');
+    }
+
+    const uploadStream = fs.createReadStream(outputPath);
+    const uploadRes = await new Promise((resolve, reject) => {
+      uploadStream.on('error', reject);
+      fetch(muxUploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'video/mp4' },
+        body: uploadStream,
+        duplex: 'half'
+      })
+        .then(resolve)
+        .catch(reject);
     });
 
     if (!uploadRes.ok) {
