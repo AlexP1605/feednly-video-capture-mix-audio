@@ -1584,6 +1584,14 @@
       return u;
     }
 
+    function buildAssetId(muxUploadUrl = '') {
+      try {
+        return muxUploadUrl.split('/').pop().split('?')[0];
+      } catch (error) {
+        return '';
+      }
+    }
+
     function updateFlashUI() {
       const isBack = facingMode === 'environment';
       if (!isBack) {
@@ -1967,75 +1975,124 @@
 
        const selectedMusic = getSelectedMusic();
        const audioMode = getFinalAudioMode();
+       const isFastPath =
+         recordedFacingMode === 'environment' &&
+         audioMode === 'original' &&
+         !selectedMusicId &&
+         isOriginalMuted === false;
 
-       const formData = new FormData();
-       formData.append('video', recordedBlob, recordedBlob.name || 'recording.mp4');
-       formData.append('facingMode', recordedFacingMode);
-       formData.append('audioMode', audioMode);
-       formData.append('muxUploadUrl', muxUploadUrl);
-       if (selectedMusic) {
-          formData.append('musicUrl', selectedMusic.url || '');
-          formData.append('musicStart', String(musicStartTime || 0));
-          formData.append('musicVolume', String(musicVolume || 0));
-       }
+       const startServerUpload = () => {
+         const formData = new FormData();
+         formData.append('video', recordedBlob, recordedBlob.name || 'recording.mp4');
+         formData.append('facingMode', recordedFacingMode);
+         formData.append('audioMode', audioMode);
+         formData.append('muxUploadUrl', muxUploadUrl);
+         if (selectedMusic) {
+            formData.append('musicUrl', selectedMusic.url || '');
+            formData.append('musicStart', String(musicStartTime || 0));
+            formData.append('musicVolume', String(musicVolume || 0));
+         }
 
-       const xhr = new XMLHttpRequest();
-       xhr.open(
-         'POST',
-         'https://feednly-video-audio-v2-506631399204.europe-west1.run.app/process-upload',
-         true
-       );
-       console.log('[UPLOAD] sending request', {
-          url: xhr.responseURL || 'unknown',
-          audioMode,
-          hasMusic: !!selectedMusic,
-          blobSize: recordedBlob?.size
-       });
-       xhr.upload.onprogress = e => {
-          if (!e.lengthComputable) return;
-          const percent = Math.round((e.loaded / e.total) * 100);
-          if (percent < 100) {
-              uploadText.textContent = `${percent}%`;
-              return;
-          }
-          if (uploadText.textContent === 'Traitement vidéo…' || uploadText.textContent === 'Finalisation…') return;
-          uploadText.textContent = 'Traitement vidéo…';
-          if (uploadPhaseTimeout) clearTimeout(uploadPhaseTimeout);
-          uploadPhaseTimeout = setTimeout(() => {
-              if (uploadOverlay.classList.contains('active') && uploadText.textContent === 'Traitement vidéo…') {
-                  uploadText.textContent = 'Finalisation…';
-              }
-          }, 1500);
+         const xhr = new XMLHttpRequest();
+         xhr.open(
+           'POST',
+           'https://feednly-video-audio-v2-506631399204.europe-west1.run.app/process-upload',
+           true
+         );
+         console.log('[UPLOAD] sending request', {
+            url: xhr.responseURL || 'unknown',
+            audioMode,
+            hasMusic: !!selectedMusic,
+            blobSize: recordedBlob?.size
+         });
+         xhr.upload.onprogress = e => {
+            if (!e.lengthComputable) return;
+            const percent = Math.round((e.loaded / e.total) * 100);
+            if (percent < 100) {
+                uploadText.textContent = `${percent}%`;
+                return;
+            }
+            if (uploadText.textContent === 'Traitement…' || uploadText.textContent === 'Envoi Mux…') return;
+            uploadText.textContent = 'Traitement…';
+            if (uploadPhaseTimeout) clearTimeout(uploadPhaseTimeout);
+            uploadPhaseTimeout = setTimeout(() => {
+                if (uploadOverlay.classList.contains('active') && uploadText.textContent === 'Traitement…') {
+                    uploadText.textContent = 'Envoi Mux…';
+                }
+            }, 1500);
+         };
+         xhr.onload = () => {
+            if(xhr.status < 300) {
+               if (uploadPhaseTimeout) {
+                  clearTimeout(uploadPhaseTimeout);
+                  uploadPhaseTimeout = null;
+               }
+               uploadText.textContent = "Succès";
+               let res = {};
+               let assetId = '';
+               try {
+                  res = JSON.parse(xhr.responseText || '{}');
+                  assetId = res.asset_id || '';
+               } catch (error) {
+                  fail('json-parse');
+                  return;
+               }
+               if (!assetId) {
+                  fail('invalid-response', JSON.stringify(res));
+                  return;
+               }
+               notifyHost({ status: 'success', action: 'next_page', asset_id: assetId });
+            } else {
+               fail('http-error', 'status ' + xhr.status + ' – ' + xhr.responseText.slice(0,200));
+            }
+         };
+         xhr.onerror = () => {
+            fail('network-error');
+         };
+         xhr.send(formData);
        };
-       xhr.onload = () => {
-          if(xhr.status < 300) {
+
+       const uploadDirectToMux = async () => {
+         console.log('[FAST_PATH_DIRECT_MUX]', {
+           facingMode: recordedFacingMode,
+           audioMode,
+           hasMusic: !!selectedMusicId,
+           isOriginalMuted
+         });
+         uploadText.textContent = 'Envoi Mux…';
+         const uploadRes = await fetch(muxUploadUrl, {
+           method: 'PUT',
+           headers: { 'Content-Type': 'video/mp4' },
+           body: recordedBlob,
+           duplex: 'half'
+         });
+         if (!uploadRes.ok) {
+           throw new Error(`Mux upload failed: ${uploadRes.status}`);
+         }
+         const assetId = buildAssetId(muxUploadUrl);
+         if (!assetId) {
+           throw new Error('invalid mux upload url');
+         }
+         return assetId;
+       };
+
+       if (isFastPath) {
+          try {
+             const assetId = await uploadDirectToMux();
              if (uploadPhaseTimeout) {
                 clearTimeout(uploadPhaseTimeout);
                 uploadPhaseTimeout = null;
              }
              uploadText.textContent = "Succès";
-             let res = {};
-             let assetId = '';
-             try {
-                res = JSON.parse(xhr.responseText || '{}');
-                assetId = res.asset_id || '';
-             } catch (error) {
-                fail('json-parse');
-                return;
-             }
-             if (!assetId) {
-                fail('invalid-response', JSON.stringify(res));
-                return;
-             }
              notifyHost({ status: 'success', action: 'next_page', asset_id: assetId });
-          } else {
-             fail('http-error', 'status ' + xhr.status + ' – ' + xhr.responseText.slice(0,200));
+             return;
+          } catch (error) {
+             console.warn('[FAST_PATH_DIRECT_MUX] fallback to server', error);
+             uploadText.textContent = "0%";
           }
-       };
-       xhr.onerror = () => {
-          fail('network-error');
-       };
-       xhr.send(formData);
+       }
+
+       startServerUpload();
     };
     
     previewOverlay.onclick = async (e) => {
