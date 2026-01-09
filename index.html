@@ -25,12 +25,18 @@
       position: fixed; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden;
     }
 
+    body.camera-starting * {
+      transition: none !important;
+      animation: none !important;
+    }
+
     /* --- CAMERA --- */
     #camera-container { position: absolute; inset: 0; z-index: 1; background: #000; }
 
     #camera-preview {
       opacity: 0;
-      transition: opacity 0.25s ease;
+      transition: none;
+      will-change: opacity, transform;
     }
 
     video {
@@ -82,6 +88,7 @@
       transition: all 0.2s;
     }
     .btn:active { transform: scale(0.9); }
+    body.camera-starting .btn:active { transform: none !important; }
     
     .btn.flash-on { border-color: var(--flash-active); }
     .btn.flash-on svg { fill: var(--flash-active); }
@@ -95,21 +102,48 @@
 
     /* --- RECORD BUTTON (ZONE AGRANDIE) --- */
     .record-wrap { 
-      position: relative; width: 90px; height: 90px; 
+      position: relative;
+      width: 90px; height: 90px;
+      min-width: 90px; min-height: 90px;
+      max-width: 90px; max-height: 90px;
+      flex: 0 0 90px;
       display: flex; align-items: center; justify-content: center; 
       pointer-events: auto; cursor: pointer; 
       -webkit-tap-highlight-color: transparent;
     }
     
-    .record-progress { position: absolute; inset: -3px; width: 96px; height: 96px; transform: rotate(-90deg); pointer-events: none; }
+    .record-progress {
+      position: absolute; inset: -3px;
+      width: 96px; height: 96px;
+      min-width: 96px; min-height: 96px;
+      max-width: 96px; max-height: 96px;
+      flex: 0 0 96px;
+      display: block;
+      transform: rotate(-90deg);
+      pointer-events: none;
+    }
     .record-progress circle { fill: none; stroke: var(--primary); stroke-width: 5px; stroke-linecap: round; stroke-dasharray: 0 999; transition: stroke-dashoffset 0.1s linear; }
     
-    .record-button { width: 72px; height: 72px; border-radius: 50%; background: #fff; border: 4px solid rgba(255,255,255,0.4); display: flex; align-items: center; justify-content: center; transition: all 0.2s; pointer-events: none; }
+    .record-button {
+      width: 72px; height: 72px;
+      min-width: 72px; min-height: 72px;
+      max-width: 72px; max-height: 72px;
+      border-radius: 50%;
+      background: #fff;
+      border: 4px solid rgba(255,255,255,0.4);
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s, border-color 0.2s;
+      pointer-events: none;
+    }
     
-    body.recording .record-button { background: var(--primary); transform: scale(1.15); border-color: rgba(255,255,255,0.6); animation: pulse 1.5s infinite; }
+    body.recording .record-button { background: var(--primary); border-color: rgba(255,255,255,0.6); animation: pulse 1.5s infinite; }
     body.recording .record-inner { width: 35%; height: 35%; background: #fff; border-radius: 6px; }
     .record-inner { width: 100%; height: 100%; border-radius: 50%; transition: all 0.2s; }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.5); } 70% { box-shadow: 0 0 0 15px rgba(255, 59, 48, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); } }
+    body.camera-starting .record-button {
+      animation: none !important;
+      box-shadow: none !important;
+    }
 
     /* --- PREVIEW UI --- */
     #preview-overlay {
@@ -759,8 +793,9 @@
     let pendingMusicId = null;
     let isDraggingWaveform = false;
     let videoDurationSeconds = 0;
-    cameraPreview.onloadedmetadata = () => {
-      cameraPreview.style.objectFit = "cover";
+    const markCameraReady = () => {
+      if (cameraReady) return;
+      if (cameraPreview.readyState < 2) return;
       cameraPreview.style.opacity = "1"; // garantir affichage plein écran
       cameraReady = true;
       document.body.classList.remove('camera-starting');
@@ -769,6 +804,7 @@
           pendingRecordUI = false;
       }
     };
+    cameraPreview.addEventListener('loadeddata', markCameraReady);
 
     let mediaStream = null;
     let mediaRecorder = null;
@@ -2007,15 +2043,7 @@
         cameraPreview.srcObject = mediaStream;
         cameraPreview.play().catch(e=>{});
 
-        if (cameraPreview.readyState >= 2) {
-          cameraPreview.style.opacity = "1";
-          cameraReady = true;
-          document.body.classList.remove('camera-starting');
-          if (pendingRecordUI && isRecording) {
-              document.body.classList.add('recording');
-              pendingRecordUI = false;
-          }
-        }
+        markCameraReady();
         
         cameraPreview.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
 
@@ -2051,15 +2079,7 @@
         cameraPreview.play().catch(e=>{});
         mediaStream = stream;
 
-        if (cameraPreview.readyState >= 2) {
-          cameraPreview.style.opacity = "1";
-          cameraReady = true;
-          document.body.classList.remove('camera-starting');
-          if (pendingRecordUI && isRecording) {
-              document.body.classList.add('recording');
-              pendingRecordUI = false;
-          }
-        }
+        markCameraReady();
         
         cameraPreview.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
 
@@ -2079,7 +2099,6 @@
 
       } catch (error) {
         console.error(error);
-        document.body.classList.remove('camera-starting');
       } finally {
         startCamera.isStarting = false;
       }
