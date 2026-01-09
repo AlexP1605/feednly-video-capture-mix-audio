@@ -336,11 +336,15 @@
     .icon-btn.loading svg { opacity: 0; }
     .icon-btn.loading::after {
       content: '';
-      width: 16px;
-      height: 16px;
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      width: 20px;
+      height: 20px;
       border: 2px solid rgba(255,255,255,0.35);
       border-top-color: #fff;
       border-radius: 50%;
+      box-sizing: border-box;
       animation: spin 0.8s linear infinite;
     }
     .icon-btn:active { transform: scale(0.95); }
@@ -475,7 +479,7 @@
     #upload-overlay.active { opacity: 1; visibility: visible; }
     .spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.2); border-top: 4px solid #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    #upload-text { margin-top: 20px; color: #fff; font-weight: 600; font-size: 18px; }
+    #upload-text { margin-top: 20px; color: #fff; font-weight: 600; font-size: 18px; text-align: center; line-height: 1.4; max-width: 320px; white-space: pre-line; }
 
     /* --- ERROR TOAST --- */
     #error-toast {
@@ -797,7 +801,7 @@
     let torchEnabled = false;
     let uploadURL = '';
     // UX: texte unifié + progression estimée pour l'upload
-    const UPLOAD_FINAL_MESSAGE = 'Finalisation (cela peut prendre quelques instants)';
+    const UPLOAD_FINAL_MESSAGE = 'Mixage de l’audio avec la vidéo\nCette opération peut prendre quelques instants selon votre connexion';
     let uploadProgressRaf = null;
     let uploadProgressValue = 0;
 
@@ -2055,6 +2059,24 @@
        previewVideo.currentTime = 0;
        stopMusicPreview({ hard: true });
        let uploadPhaseTimeout = null;
+       let uploadSuccessNotified = false;
+
+       function resetAfterUploadSuccess() {
+          if (uploadPhaseTimeout) {
+              clearTimeout(uploadPhaseTimeout);
+              uploadPhaseTimeout = null;
+          }
+          stopUploadProgressAnimation();
+          setUploadProgress(0);
+          uploadText.textContent = "Préparation...";
+          uploadOverlay.classList.remove('active');
+          previewOverlay.classList.remove('active');
+          document.body.classList.remove('showing-preview');
+          unlockPreviewViewport();
+          resetPreviewState();
+          recordedChunks = [];
+          pendingRecordUI = false;
+       }
 
        function fail(step, detail = '') {
           const msg = `Échec (${step})${detail ? ' : ' + detail : ''}`;
@@ -2067,6 +2089,13 @@
           uploadText.textContent = msg;
           showError(msg);
           setTimeout(() => uploadOverlay.classList.remove('active'), 4000);
+       }
+
+       function handleUploadSuccess(assetId) {
+          if (!assetId || uploadSuccessNotified) return;
+          uploadSuccessNotified = true;
+          notifyHost({ status: 'success', action: 'next_page', asset_id: assetId });
+          resetAfterUploadSuccess();
        }
 
        const muxUploadUrl = getUploadURL();
@@ -2144,7 +2173,7 @@
                   fail('invalid-response', JSON.stringify(res));
                   return;
                }
-               notifyHost({ status: 'success', action: 'next_page', asset_id: assetId });
+               handleUploadSuccess(assetId);
             } else {
                fail('http-error', 'status ' + xhr.status + ' – ' + xhr.responseText.slice(0,200));
             }
@@ -2189,7 +2218,7 @@
                 uploadPhaseTimeout = null;
              }
              uploadText.textContent = "Succès";
-             notifyHost({ status: 'success', action: 'next_page', asset_id: assetId });
+             handleUploadSuccess(assetId);
              return;
           } catch (error) {
              console.warn('[FAST_PATH_DIRECT_MUX] fallback to server', error);
