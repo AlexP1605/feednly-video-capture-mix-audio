@@ -183,15 +183,15 @@
 
     .preview-audio-controls {
       position: absolute;
-      left: 0;
-      right: 0;
+      right: 18px;
       top: calc(env(safe-area-inset-top) - 4px);
       z-index: 10;
       display: flex;
-      align-items: center;
-      justify-content: center;
+      flex-direction: column;
+      align-items: flex-end;
       gap: 10px;
-      padding: 0 18px;
+      padding: 0;
+      pointer-events: auto;
     }
     .music-overlay {
       padding: 0 14px;
@@ -206,6 +206,18 @@
       max-width: 240px;
     }
     .music-overlay.hidden { display: none; }
+    .music-overlay.empty {
+      padding: 0;
+      width: var(--preview-audio-control-size);
+      height: var(--preview-audio-control-size);
+      border-radius: 50%;
+      justify-content: center;
+      max-width: none;
+    }
+    .music-overlay.empty .music-meta,
+    .music-overlay.empty .music-clear {
+      display: none;
+    }
     .music-meta { display: flex; flex-direction: column; min-width: 0; }
     .music-title { font-weight: 800; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
     .music-artist, .music-duration { display: none; }
@@ -222,8 +234,6 @@
     }
     .music-clear svg { width: 12px; height: 12px; }
     .music-clear:active { transform: scale(0.92); }
-    .music-overlay.empty { gap: 10px; }
-    .music-overlay.empty .music-clear { display: none; }
     .preview-audio-toggle {
       width: var(--preview-audio-control-size);
       height: var(--preview-audio-control-size);
@@ -237,11 +247,71 @@
       backdrop-filter: blur(14px);
       box-shadow: 0 12px 28px rgba(0,0,0,0.35);
       transition: transform 0.2s ease;
-      position: absolute;
-      right: 18px;
     }
     .preview-audio-toggle:active { transform: scale(0.92); }
     .preview-audio-toggle svg { width: 22px; height: 22px; fill: currentColor; }
+
+    .thumbnail-button {
+      position: absolute;
+      left: 18px;
+      bottom: 18px;
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.25);
+      background: rgba(20,20,20,0.7);
+      background-size: cover;
+      background-position: center;
+      box-shadow: 0 12px 24px rgba(0,0,0,0.4);
+      cursor: pointer;
+      z-index: 8;
+      display: grid;
+      place-items: center;
+    }
+
+    .thumbnail-strip {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      scroll-snap-type: x mandatory;
+    }
+    .thumbnail-frame {
+      width: 90px;
+      height: 140px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.08);
+      background-size: cover;
+      background-position: center;
+      flex: 0 0 auto;
+      scroll-snap-align: center;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      position: relative;
+    }
+    .thumbnail-frame.active {
+      transform: scale(1.08);
+      border-color: rgba(255,255,255,0.9);
+      box-shadow: 0 12px 24px rgba(0,0,0,0.35);
+    }
+    .thumbnail-frame .time-chip {
+      position: absolute;
+      bottom: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      font-weight: 700;
+    }
+    .thumbnail-loading {
+      font-size: 13px;
+      opacity: 0.7;
+      text-align: center;
+      padding: 18px 0;
+    }
 
     .sheet-backdrop {
       position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0.75));
@@ -653,6 +723,7 @@
           </button>
         </div>
         <video id="preview-video" playsinline webkit-playsinline loop preload="auto"></video>
+        <button type="button" id="thumbnail-button" class="thumbnail-button" aria-label="Choisir une miniature"></button>
       </div>
       <div id="sheet-backdrop" class="sheet-backdrop"></div>
         <div id="music-controls" class="sheet">
@@ -726,6 +797,17 @@
             <div id="music-filter-tags" class="tag-grid"></div>
           </div>
         </div>
+        <div id="thumbnail-sheet" class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-content">
+            <header>
+              <div class="title">Miniature</div>
+            </header>
+            <p style="margin: 0; opacity: 0.65; font-size: 12px; text-align: center;">Sélectionnez l’image de couverture de votre vidéo.</p>
+            <div id="thumbnail-strip" class="thumbnail-strip" role="listbox" aria-label="Choisir une miniature"></div>
+            <div id="thumbnail-loading" class="thumbnail-loading" hidden>Génération des miniatures…</div>
+          </div>
+        </div>
     <div id="preview-actions">
       <button type="button" id="restart-button" class="action-btn">Recommencer</button>
       <button type="button" id="next-button" class="action-btn">Suivant</button>
@@ -781,6 +863,10 @@
     const musicFilterTags = document.getElementById('music-filter-tags');
     const sheetBackdrop = document.getElementById('sheet-backdrop');
     const waveformVisual = document.getElementById('waveform-visual');
+    const thumbnailButton = document.getElementById('thumbnail-button');
+    const thumbnailSheet = document.getElementById('thumbnail-sheet');
+    const thumbnailStrip = document.getElementById('thumbnail-strip');
+    const thumbnailLoading = document.getElementById('thumbnail-loading');
     let waveformHandleStart = null;
     let waveformHandleEnd = null;
     const tabWaveform = document.getElementById('tab-waveform');
@@ -812,6 +898,9 @@
     let isRecording = false;
     let recordedBlob = null;
     let previewObjectURL = null;
+    let selectedThumbnailTime = 0.5;
+    let thumbnailFrames = [];
+    let thumbnailFramesPromise = null;
     // UX: garder l'UI stable le temps que la caméra soit prête
     let cameraReady = false;
     let pendingRecordUI = false;
@@ -961,6 +1050,172 @@
         const m = Math.floor(totalSeconds / 60).toString();
         const s = (totalSeconds % 60).toString().padStart(2, '0');
         return `${m}:${s}`;
+    }
+
+    // --- MINIATURES (Thumbnail picker) ---
+    const DEFAULT_THUMBNAIL_TIME = 0.5;
+
+    function getThumbnailFrameCount(durationSeconds) {
+        if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return 20;
+        return Math.min(30, Math.max(20, Math.round(durationSeconds * 2)));
+    }
+
+    function selectNearestThumbnailFrame(timeSeconds) {
+        if (!thumbnailFrames.length) return null;
+        const target = Math.max(0, timeSeconds || 0);
+        return thumbnailFrames.reduce((closest, frame) => {
+            if (!closest) return frame;
+            return Math.abs(frame.time - target) < Math.abs(closest.time - target) ? frame : closest;
+        }, null);
+    }
+
+    function updateThumbnailButtonPreview() {
+        if (!thumbnailButton) return;
+        const frame = selectNearestThumbnailFrame(selectedThumbnailTime);
+        if (frame?.url) {
+            thumbnailButton.style.backgroundImage = `url(${frame.url})`;
+        } else {
+            thumbnailButton.style.backgroundImage = '';
+        }
+    }
+
+    function setSelectedThumbnail(timeSeconds) {
+        const nextTime = Math.max(0, Number.isFinite(timeSeconds) ? timeSeconds : DEFAULT_THUMBNAIL_TIME);
+        selectedThumbnailTime = nextTime;
+        updateThumbnailButtonPreview();
+        if (!thumbnailStrip) return;
+        const items = thumbnailStrip.querySelectorAll('.thumbnail-frame');
+        let closestItem = null;
+        let closestDiff = Number.POSITIVE_INFINITY;
+        items.forEach((item) => {
+            const itemTime = Number(item.dataset.time || 0);
+            const diff = Math.abs(itemTime - nextTime);
+            if (diff < closestDiff) {
+                closestDiff = diff;
+                closestItem = item;
+            }
+        });
+        items.forEach((item) => item.classList.toggle('active', item === closestItem));
+    }
+
+    function renderThumbnailStrip(frames) {
+        if (!thumbnailStrip) return;
+        thumbnailStrip.innerHTML = '';
+        if (!frames.length) return;
+        const fragment = document.createDocumentFragment();
+        frames.forEach((frame) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'thumbnail-frame';
+            button.dataset.time = String(frame.time);
+            button.style.backgroundImage = frame.url ? `url(${frame.url})` : '';
+            const chip = document.createElement('span');
+            chip.className = 'time-chip';
+            chip.textContent = formatTimeLabel(frame.time);
+            button.appendChild(chip);
+            button.onclick = (e) => {
+                e.stopPropagation();
+                setSelectedThumbnail(frame.time);
+            };
+            fragment.appendChild(button);
+        });
+        thumbnailStrip.appendChild(fragment);
+        setSelectedThumbnail(selectedThumbnailTime);
+    }
+
+    function seekVideoToTime(video, timeSeconds) {
+        return new Promise((resolve) => {
+            const handleSeek = () => {
+                video.removeEventListener('seeked', handleSeek);
+                resolve();
+            };
+            video.addEventListener('seeked', handleSeek, { once: true });
+            const safeTime = Math.min(Math.max(0, timeSeconds), Math.max(video.duration || timeSeconds, 0));
+            video.currentTime = safeTime;
+        });
+    }
+
+    async function extractThumbnailFrames(videoBlob) {
+        if (!videoBlob) return [];
+        if (thumbnailFramesPromise) return thumbnailFramesPromise;
+        if (thumbnailLoading) thumbnailLoading.hidden = false;
+
+        thumbnailFramesPromise = (async () => {
+            const tempVideo = document.createElement('video');
+            tempVideo.muted = true;
+            tempVideo.preload = 'auto';
+            const objectUrl = URL.createObjectURL(videoBlob);
+            tempVideo.src = objectUrl;
+
+            await new Promise((resolve, reject) => {
+                tempVideo.onloadedmetadata = () => resolve();
+                tempVideo.onerror = () => reject(new Error('thumbnail metadata failed'));
+            });
+
+            const duration = Math.max(0.1, Number(tempVideo.duration) || videoDurationSeconds || 0.1);
+            const frameCount = getThumbnailFrameCount(duration);
+            const step = frameCount > 1 ? duration / (frameCount - 1) : duration;
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return [];
+
+            const aspect = tempVideo.videoWidth && tempVideo.videoHeight
+                ? tempVideo.videoWidth / tempVideo.videoHeight
+                : 9 / 16;
+            canvas.width = 160;
+            canvas.height = Math.round(canvas.width / aspect);
+
+            const frames = [];
+            for (let i = 0; i < frameCount; i += 1) {
+                const time = Math.min(duration, i * step);
+                await seekVideoToTime(tempVideo, time);
+                ctx.drawImage(tempVideo, 0, 0, canvas.width, canvas.height);
+                const url = canvas.toDataURL('image/jpeg', 0.7);
+                frames.push({ time, url });
+                await new Promise((resolve) => scheduleIdleTask(resolve, { timeout: 300, fallbackDelay: 80 }));
+            }
+
+            canvas.width = 0;
+            canvas.height = 0;
+            tempVideo.removeAttribute('src');
+            tempVideo.load();
+            URL.revokeObjectURL(objectUrl);
+            return frames;
+        })()
+            .then((frames) => {
+                thumbnailFrames = frames;
+                return frames;
+            })
+            .catch(() => [])
+            .finally(() => {
+                if (thumbnailLoading) thumbnailLoading.hidden = true;
+                thumbnailFramesPromise = null;
+            });
+
+        return thumbnailFramesPromise;
+    }
+
+    function openThumbnailPicker() {
+        if (!thumbnailSheet) return;
+        closeMusicSheet();
+        thumbnailSheet.classList.add('active');
+        updateSheetBackdrop();
+        extractThumbnailFrames(recordedBlob).then((frames) => {
+            renderThumbnailStrip(frames || []);
+            updateThumbnailButtonPreview();
+        });
+    }
+
+    function prepareThumbnailPreview() {
+        if (!recordedBlob) return;
+        scheduleIdleTask(() => {
+            extractThumbnailFrames(recordedBlob).then((frames) => {
+                updateThumbnailButtonPreview();
+                if (thumbnailSheet?.classList.contains('active')) {
+                    renderThumbnailStrip(frames || []);
+                }
+            });
+        }, { timeout: 600, fallbackDelay: 200 });
     }
 
     // UX: progression en % (réelle ou estimée) pour l'overlay d'upload
@@ -1497,12 +1752,15 @@
     }
 
     function updateSheetBackdrop() {
-        const hasActiveSheet = musicSheet?.classList.contains('active') || musicFilterSheet?.classList.contains('active');
+        const hasActiveSheet = musicSheet?.classList.contains('active')
+            || musicFilterSheet?.classList.contains('active')
+            || thumbnailSheet?.classList.contains('active');
         sheetBackdrop?.classList.toggle('active', hasActiveSheet);
     }
 
     function openMusicSheet() {
         if (!musicSheet) return;
+        closeThumbnailSheet();
         setActiveTab('music');
         musicSheet.classList.add('active');
         updateSheetBackdrop();
@@ -1522,6 +1780,11 @@
 
     function closeFilterSheet() {
         musicFilterSheet?.classList.remove('active');
+        updateSheetBackdrop();
+    }
+
+    function closeThumbnailSheet() {
+        thumbnailSheet?.classList.remove('active');
         updateSheetBackdrop();
     }
 
@@ -1586,9 +1849,18 @@
     });
     musicSheet.onclick = (e) => e.stopPropagation();
     musicFilterSheet.onclick = (e) => e.stopPropagation();
+    thumbnailSheet.onclick = (e) => e.stopPropagation();
+    thumbnailButton?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openThumbnailPicker();
+    });
     sheetBackdrop.onclick = () => {
         if (musicFilterSheet?.classList.contains('active')) {
             closeFilterSheet();
+            return;
+        }
+        if (thumbnailSheet?.classList.contains('active')) {
+            closeThumbnailSheet();
             return;
         }
         closeMusicSheet();
@@ -1601,12 +1873,16 @@
                 closeFilterSheet();
                 return;
             }
+            if (thumbnailSheet?.classList.contains('active')) {
+                closeThumbnailSheet();
+                return;
+            }
             closeMusicSheet();
         }
     });
 
     let sheetTouchStartY = null;
-    [musicSheet, musicFilterSheet].forEach((sheet) => {
+    [musicSheet, musicFilterSheet, thumbnailSheet].forEach((sheet) => {
         sheet?.addEventListener('touchstart', (e) => {
             sheetTouchStartY = e.touches[0]?.clientY ?? null;
         }, { passive: true });
@@ -1617,6 +1893,8 @@
             if (endY - sheetTouchStartY > 60) {
                 if (sheet === musicFilterSheet) {
                     closeFilterSheet();
+                } else if (sheet === thumbnailSheet) {
+                    closeThumbnailSheet();
                 } else {
                     closeMusicSheet();
                 }
@@ -2221,6 +2499,15 @@
        previewOverlay.style.removeProperty('--preview-viewport-width');
     }
 
+    function resetThumbnailDefaults() {
+       selectedThumbnailTime = DEFAULT_THUMBNAIL_TIME;
+       thumbnailFrames = [];
+       thumbnailFramesPromise = null;
+       if (thumbnailStrip) thumbnailStrip.innerHTML = '';
+       if (thumbnailButton) thumbnailButton.style.backgroundImage = '';
+       if (thumbnailLoading) thumbnailLoading.hidden = true;
+    }
+
     function showPreview(blob) {
        if (previewObjectURL) URL.revokeObjectURL(previewObjectURL);
        previewObjectURL = URL.createObjectURL(blob);
@@ -2249,12 +2536,15 @@
        }
 
        // Sélection par défaut à chaque nouvelle preview
+       resetThumbnailDefaults();
        resetMusicDefaults();
        closeFilterSheet();
        closeMusicSheet();
+       closeThumbnailSheet();
 
        syncOriginalMuteState();
        updateMusicSelectionUI();
+       prepareThumbnailPreview();
     }
 
     function resetPreviewState() {
@@ -2263,6 +2553,7 @@
             previewTimeout = null;
         }
         stopMusicPreview({ hard: true });
+        resetThumbnailDefaults();
         previewVideo.pause();
         previewVideo.src = '';
         if (previewObjectURL) {
@@ -2293,6 +2584,9 @@
                 hidePreview();
             }
             shouldCheckDuration = false;
+        }
+        if (videoDurationSeconds && selectedThumbnailTime > videoDurationSeconds) {
+            setSelectedThumbnail(videoDurationSeconds);
         }
         setSeekLimits(currentMusicDuration);
         updateMusicOverlay();
@@ -2460,6 +2754,7 @@
          formData.append('facingMode', recordedFacingMode);
          formData.append('audioMode', audioMode);
          formData.append('muxUploadUrl', muxUploadUrl);
+         formData.append('thumbnailTime', String(Number.isFinite(selectedThumbnailTime) ? selectedThumbnailTime : DEFAULT_THUMBNAIL_TIME));
          if (selectedMusic) {
             formData.append('musicUrl', selectedMusic.url || '');
             formData.append('musicStart', String(musicStartTime || 0));
@@ -2570,9 +2865,11 @@
     previewOverlay.onclick = async (e) => {
       const tappedAction = e.target.closest('.action-btn') || e.target.closest('#preview-actions');
       const tappedSheet = e.target.closest('.sheet');
-      if ((musicSheet.classList.contains('active') || musicFilterSheet.classList.contains('active')) && !tappedSheet) {
+      if ((musicSheet.classList.contains('active') || musicFilterSheet.classList.contains('active') || thumbnailSheet.classList.contains('active')) && !tappedSheet) {
          if (musicFilterSheet.classList.contains('active')) {
             closeFilterSheet();
+         } else if (thumbnailSheet.classList.contains('active')) {
+            closeThumbnailSheet();
          } else {
             closeMusicSheet();
          }
