@@ -13,6 +13,7 @@
       --active-timer: #ffcc00;
       --flash-active: #ffcc00;
       --preview-audio-control-size: 52px;
+      --preview-top-control-offset: calc(env(safe-area-inset-top) - 4px);
     }
 
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-touch-callout: none; }
@@ -184,7 +185,7 @@
     .preview-audio-controls {
       position: absolute;
       right: 18px;
-      top: calc(env(safe-area-inset-top) - 4px);
+      top: var(--preview-top-control-offset);
       z-index: 10;
       display: flex;
       flex-direction: column;
@@ -221,8 +222,9 @@
     .music-meta { display: flex; flex-direction: column; min-width: 0; }
     .music-title { font-weight: 800; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
     .music-artist, .music-duration { display: none; }
-    .music-visual { display: flex; align-items: center; gap: 10px; min-width: 0; }
-    .music-icon { width: 22px; height: 22px; fill: #fff; flex-shrink: 0; }
+    .music-visual { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-width: 0; }
+    .music-overlay.empty .music-visual { width: 100%; justify-content: center; }
+    .music-icon { width: 22px; height: 22px; fill: #fff; flex-shrink: 0; display: block; }
 
     .music-clear {
       width: 26px; height: 26px; border-radius: 50%;
@@ -253,8 +255,8 @@
 
     .thumbnail-button {
       position: absolute;
-      left: 18px;
-      bottom: 18px;
+      top: var(--preview-top-control-offset);
+      left: 50%;
       width: 46px;
       height: 46px;
       border-radius: 12px;
@@ -267,14 +269,41 @@
       z-index: 8;
       display: grid;
       place-items: center;
+      transform: translateX(-50%);
+    }
+
+    .thumbnail-preview-wrap {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+    }
+    .thumbnail-preview {
+      width: min(240px, 70vw);
+      aspect-ratio: 9 / 16;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.08);
+      background-size: cover;
+      background-position: center;
+      box-shadow: 0 18px 30px rgba(0,0,0,0.45);
+      opacity: 0;
+      transform: scale(0.98);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .thumbnail-preview.ready {
+      opacity: 1;
+      transform: scale(1);
     }
 
     .thumbnail-strip {
       display: flex;
       gap: 8px;
       overflow-x: auto;
+      overflow-y: hidden;
       padding-bottom: 4px;
       scroll-snap-type: x mandatory;
+      touch-action: pan-x;
+      overscroll-behavior: contain;
     }
     .thumbnail-frame {
       width: 90px;
@@ -312,6 +341,13 @@
       text-align: center;
       padding: 18px 0;
     }
+
+    #thumbnail-sheet .sheet-content {
+      overflow: hidden;
+      padding-bottom: 24px;
+      align-items: center;
+    }
+    #thumbnail-sheet .sheet-content > * { width: 100%; }
 
     .sheet-backdrop {
       position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0.75));
@@ -804,6 +840,9 @@
               <div class="title">Miniature</div>
             </header>
             <p style="margin: 0; opacity: 0.65; font-size: 12px; text-align: center;">Sélectionnez l’image de couverture de votre vidéo.</p>
+            <div class="thumbnail-preview-wrap">
+              <div id="selected-thumbnail-preview" class="thumbnail-preview" role="img" aria-label="Miniature sélectionnée"></div>
+            </div>
             <div id="thumbnail-strip" class="thumbnail-strip" role="listbox" aria-label="Choisir une miniature"></div>
             <div id="thumbnail-loading" class="thumbnail-loading" hidden>Génération des miniatures…</div>
           </div>
@@ -865,6 +904,7 @@
     const waveformVisual = document.getElementById('waveform-visual');
     const thumbnailButton = document.getElementById('thumbnail-button');
     const thumbnailSheet = document.getElementById('thumbnail-sheet');
+    const selectedThumbnailPreview = document.getElementById('selected-thumbnail-preview');
     const thumbnailStrip = document.getElementById('thumbnail-strip');
     const thumbnailLoading = document.getElementById('thumbnail-loading');
     let waveformHandleStart = null;
@@ -1054,10 +1094,62 @@
 
     // --- MINIATURES (Thumbnail picker) ---
     const DEFAULT_THUMBNAIL_TIME = 0.5;
+    const THUMBNAIL_IMMEDIATE_TIMES = [0.3, 1];
+    const THUMBNAIL_MIN_STEP = 0.8;
+    const THUMBNAIL_MAX_STEP = 1;
+    const THUMBNAIL_MAX_FRAMES = 18;
+    const THUMBNAIL_TIME_TOLERANCE = 0.08;
+    let thumbnailGenerationId = 0;
+    let isThumbnailScrubbing = false;
+    let thumbnailStripScrollRaf = null;
+    let lastPreviewSeek = 0;
 
-    function getThumbnailFrameCount(durationSeconds) {
-        if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return 20;
-        return Math.min(30, Math.max(20, Math.round(durationSeconds * 2)));
+    function getThumbnailFrameTimes(durationSeconds) {
+        const duration = Math.max(0.1, Number(durationSeconds) || 0.1);
+        const step = Math.max(THUMBNAIL_MIN_STEP, Math.min(THUMBNAIL_MAX_STEP, duration / (THUMBNAIL_MAX_FRAMES - 1)));
+        const count = Math.min(THUMBNAIL_MAX_FRAMES, Math.max(2, Math.floor(duration / step) + 1));
+        const times = Array.from({ length: count }, (_, index) => Math.min(duration, index * step));
+        if (times.length) {
+            times[times.length - 1] = duration;
+        }
+        return times;
+    }
+
+    function getImmediateThumbnailTimes(durationSeconds) {
+        const duration = Math.max(0.1, Number(durationSeconds) || 0.1);
+        const times = THUMBNAIL_IMMEDIATE_TIMES
+            .map(time => Math.min(duration, Math.max(0, time)))
+            .filter(time => Number.isFinite(time));
+        return Array.from(new Set(times)).sort((a, b) => a - b);
+    }
+
+    function buildThumbnailTimeList(durationSeconds) {
+        const baseTimes = getThumbnailFrameTimes(durationSeconds);
+        const immediateTimes = getImmediateThumbnailTimes(durationSeconds);
+        const adjustedTimes = [...baseTimes];
+        immediateTimes.forEach((time) => {
+            let closestIndex = 0;
+            let closestDiff = Number.POSITIVE_INFINITY;
+            adjustedTimes.forEach((value, index) => {
+                const diff = Math.abs(value - time);
+                if (diff < closestDiff) {
+                    closestDiff = diff;
+                    closestIndex = index;
+                }
+            });
+            adjustedTimes[closestIndex] = time;
+        });
+        const sortedTimes = adjustedTimes.sort((a, b) => a - b);
+        return sortedTimes.reduce((acc, time) => {
+            const last = acc[acc.length - 1];
+            const isImmediate = immediateTimes.some(immediate => Math.abs(immediate - time) < THUMBNAIL_TIME_TOLERANCE);
+            if (acc.length && Math.abs(last - time) <= THUMBNAIL_TIME_TOLERANCE) {
+                if (isImmediate) acc[acc.length - 1] = time;
+                return acc;
+            }
+            acc.push(time);
+            return acc;
+        }, []);
     }
 
     function selectNearestThumbnailFrame(timeSeconds) {
@@ -1079,10 +1171,23 @@
         }
     }
 
-    function setSelectedThumbnail(timeSeconds) {
+    function updateSelectedThumbnailPreview() {
+        if (!selectedThumbnailPreview) return;
+        const frame = selectNearestThumbnailFrame(selectedThumbnailTime);
+        if (frame?.url) {
+            selectedThumbnailPreview.style.backgroundImage = `url(${frame.url})`;
+            selectedThumbnailPreview.classList.add('ready');
+        } else {
+            selectedThumbnailPreview.style.backgroundImage = '';
+            selectedThumbnailPreview.classList.remove('ready');
+        }
+    }
+
+    function setSelectedThumbnail(timeSeconds, { seekPreview = false } = {}) {
         const nextTime = Math.max(0, Number.isFinite(timeSeconds) ? timeSeconds : DEFAULT_THUMBNAIL_TIME);
         selectedThumbnailTime = nextTime;
         updateThumbnailButtonPreview();
+        updateSelectedThumbnailPreview();
         if (!thumbnailStrip) return;
         const items = thumbnailStrip.querySelectorAll('.thumbnail-frame');
         let closestItem = null;
@@ -1096,10 +1201,15 @@
             }
         });
         items.forEach((item) => item.classList.toggle('active', item === closestItem));
+        if (seekPreview && previewVideo?.readyState) {
+            const safeTime = Math.min(Math.max(0, nextTime), Math.max(previewVideo.duration || nextTime, 0));
+            safeSeekPreview(safeTime);
+        }
     }
 
     function renderThumbnailStrip(frames) {
         if (!thumbnailStrip) return;
+        const previousScrollLeft = thumbnailStrip.scrollLeft;
         thumbnailStrip.innerHTML = '';
         if (!frames.length) return;
         const fragment = document.createDocumentFragment();
@@ -1115,12 +1225,56 @@
             button.appendChild(chip);
             button.onclick = (e) => {
                 e.stopPropagation();
-                setSelectedThumbnail(frame.time);
+                setSelectedThumbnail(frame.time, { seekPreview: true });
             };
             fragment.appendChild(button);
         });
         thumbnailStrip.appendChild(fragment);
+        thumbnailStrip.scrollLeft = previousScrollLeft;
         setSelectedThumbnail(selectedThumbnailTime);
+    }
+
+    function getClosestThumbnailTimeByX(clientX) {
+        if (!thumbnailStrip) return null;
+        const items = thumbnailStrip.querySelectorAll('.thumbnail-frame');
+        if (!items.length) return null;
+        const targetX = Number.isFinite(clientX) ? clientX : thumbnailStrip.getBoundingClientRect().left + thumbnailStrip.clientWidth / 2;
+        let closestTime = null;
+        let closestDistance = Number.POSITIVE_INFINITY;
+        items.forEach((item) => {
+            const rect = item.getBoundingClientRect();
+            const center = rect.left + rect.width / 2;
+            const distance = Math.abs(center - targetX);
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestTime = Number(item.dataset.time || 0);
+            }
+        });
+        return closestTime;
+    }
+
+    function handleThumbnailScrub(clientX) {
+        const time = getClosestThumbnailTimeByX(clientX);
+        if (!Number.isFinite(time)) return;
+        setSelectedThumbnail(time, { seekPreview: true });
+    }
+
+    function handleThumbnailStripScroll() {
+        if (!thumbnailStrip) return;
+        if (thumbnailStripScrollRaf) return;
+        thumbnailStripScrollRaf = requestAnimationFrame(() => {
+            thumbnailStripScrollRaf = null;
+            handleThumbnailScrub(
+                thumbnailStrip.getBoundingClientRect().left + thumbnailStrip.clientWidth / 2,
+            );
+        });
+    }
+
+    function safeSeekPreview(timeSeconds) {
+        const now = performance.now();
+        if (now - lastPreviewSeek < 33) return;
+        lastPreviewSeek = now;
+        previewVideo.currentTime = timeSeconds;
     }
 
     function seekVideoToTime(video, timeSeconds) {
@@ -1153,8 +1307,6 @@
             });
 
             const duration = Math.max(0.1, Number(tempVideo.duration) || videoDurationSeconds || 0.1);
-            const frameCount = getThumbnailFrameCount(duration);
-            const step = frameCount > 1 ? duration / (frameCount - 1) : duration;
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             if (!ctx) return [];
@@ -1165,15 +1317,73 @@
             canvas.width = 160;
             canvas.height = Math.round(canvas.width / aspect);
 
-            const frames = [];
-            for (let i = 0; i < frameCount; i += 1) {
-                const time = Math.min(duration, i * step);
+            thumbnailGenerationId += 1;
+            const currentGeneration = thumbnailGenerationId;
+            let frames = [];
+            let renderScheduled = false;
+
+            const scheduleThumbnailRender = () => {
+                if (renderScheduled) return;
+                renderScheduled = true;
+                requestAnimationFrame(() => {
+                    renderScheduled = false;
+                    if (currentGeneration !== thumbnailGenerationId) return;
+                    if (thumbnailSheet?.classList.contains('active')) {
+                        renderThumbnailStrip(frames);
+                    }
+                    updateThumbnailButtonPreview();
+                    updateSelectedThumbnailPreview();
+                });
+            };
+
+            const captureFrameAt = async (time) => {
                 await seekVideoToTime(tempVideo, time);
                 ctx.drawImage(tempVideo, 0, 0, canvas.width, canvas.height);
                 const url = canvas.toDataURL('image/jpeg', 0.7);
-                frames.push({ time, url });
-                await new Promise((resolve) => scheduleIdleTask(resolve, { timeout: 300, fallbackDelay: 80 }));
+                return { time, url };
+            };
+
+            const pushFrame = (frame) => {
+                if (!frame) return;
+                frames = [...frames, frame]
+                    .sort((a, b) => a.time - b.time);
+                thumbnailFrames = frames;
+                scheduleThumbnailRender();
+            };
+
+            const times = buildThumbnailTimeList(duration);
+            const immediateTimes = getImmediateThumbnailTimes(duration);
+            const remainingTimes = times.filter(
+                time => !immediateTimes.some(immediate => Math.abs(immediate - time) < THUMBNAIL_TIME_TOLERANCE),
+            );
+
+            for (const time of immediateTimes) {
+                if (currentGeneration !== thumbnailGenerationId) break;
+                const frame = await captureFrameAt(time);
+                pushFrame(frame);
             }
+
+            await new Promise((resolve) => {
+                const processQueue = async () => {
+                    if (currentGeneration !== thumbnailGenerationId) {
+                        resolve();
+                        return;
+                    }
+                    if (!remainingTimes.length) {
+                        resolve();
+                        return;
+                    }
+                    const time = remainingTimes.shift();
+                    try {
+                        const frame = await captureFrameAt(time);
+                        pushFrame(frame);
+                    } catch (error) {
+                        // ignore single frame failures
+                    }
+                    scheduleIdleTask(processQueue, { timeout: 400, fallbackDelay: 120 });
+                };
+                scheduleIdleTask(processQueue, { timeout: 400, fallbackDelay: 120 });
+            });
 
             canvas.width = 0;
             canvas.height = 0;
@@ -1200,6 +1410,7 @@
         closeMusicSheet();
         thumbnailSheet.classList.add('active');
         updateSheetBackdrop();
+        updateSelectedThumbnailPreview();
         extractThumbnailFrames(recordedBlob).then((frames) => {
             renderThumbnailStrip(frames || []);
             updateThumbnailButtonPreview();
@@ -1208,14 +1419,13 @@
 
     function prepareThumbnailPreview() {
         if (!recordedBlob) return;
-        scheduleIdleTask(() => {
-            extractThumbnailFrames(recordedBlob).then((frames) => {
-                updateThumbnailButtonPreview();
-                if (thumbnailSheet?.classList.contains('active')) {
-                    renderThumbnailStrip(frames || []);
-                }
-            });
-        }, { timeout: 600, fallbackDelay: 200 });
+        extractThumbnailFrames(recordedBlob).then((frames) => {
+            updateThumbnailButtonPreview();
+            updateSelectedThumbnailPreview();
+            if (thumbnailSheet?.classList.contains('active')) {
+                renderThumbnailStrip(frames || []);
+            }
+        });
     }
 
     // UX: progression en % (réelle ou estimée) pour l'overlay d'upload
@@ -1737,6 +1947,26 @@
             const touch = e.changedTouches?.[0];
             if (touch) handleWaveformInteraction(touch.clientX);
         }, { passive: true });
+    }
+
+    if (thumbnailStrip) {
+        thumbnailStrip.addEventListener('pointerdown', (e) => {
+            isThumbnailScrubbing = true;
+            thumbnailStrip.setPointerCapture?.(e.pointerId);
+            handleThumbnailScrub(e.clientX);
+        });
+        thumbnailStrip.addEventListener('pointermove', (e) => {
+            if (!isThumbnailScrubbing) return;
+            handleThumbnailScrub(e.clientX);
+        });
+        const endThumbnailScrub = (e) => {
+            if (!isThumbnailScrubbing) return;
+            isThumbnailScrubbing = false;
+            thumbnailStrip.releasePointerCapture?.(e.pointerId);
+        };
+        thumbnailStrip.addEventListener('pointerup', endThumbnailScrub);
+        thumbnailStrip.addEventListener('pointercancel', endThumbnailScrub);
+        thumbnailStrip.addEventListener('scroll', handleThumbnailStripScroll, { passive: true });
     }
 
     function setActiveTab(tabKey = 'music') {
@@ -2505,6 +2735,10 @@
        thumbnailFramesPromise = null;
        if (thumbnailStrip) thumbnailStrip.innerHTML = '';
        if (thumbnailButton) thumbnailButton.style.backgroundImage = '';
+       if (selectedThumbnailPreview) {
+           selectedThumbnailPreview.style.backgroundImage = '';
+           selectedThumbnailPreview.classList.remove('ready');
+       }
        if (thumbnailLoading) thumbnailLoading.hidden = true;
     }
 
