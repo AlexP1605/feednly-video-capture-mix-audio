@@ -184,15 +184,15 @@
 
     .preview-audio-controls {
       position: absolute;
-      right: 18px;
       top: var(--preview-top-control-offset);
+      left: 0;
+      right: 0;
       z-index: 10;
       display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 10px;
-      padding: 0;
-      pointer-events: auto;
+      align-items: center;
+      justify-content: center;
+      padding: 0 18px;
+      pointer-events: none;
     }
     .music-overlay {
       padding: 0 14px;
@@ -205,20 +205,13 @@
       min-height: var(--preview-audio-control-size);
       height: var(--preview-audio-control-size);
       max-width: 240px;
+      pointer-events: auto;
     }
     .music-overlay.hidden { display: none; }
     .music-overlay.empty {
-      padding: 0;
-      width: var(--preview-audio-control-size);
-      height: var(--preview-audio-control-size);
-      border-radius: 50%;
       justify-content: center;
-      max-width: none;
     }
-    .music-overlay.empty .music-meta,
-    .music-overlay.empty .music-clear {
-      display: none;
-    }
+    .music-overlay.empty .music-clear { display: none; }
     .music-meta { display: flex; flex-direction: column; min-width: 0; }
     .music-title { font-weight: 800; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
     .music-artist, .music-duration { display: none; }
@@ -237,6 +230,9 @@
     .music-clear svg { width: 12px; height: 12px; }
     .music-clear:active { transform: scale(0.92); }
     .preview-audio-toggle {
+      position: absolute;
+      right: 18px;
+      top: 0;
       width: var(--preview-audio-control-size);
       height: var(--preview-audio-control-size);
       border-radius: 50%;
@@ -249,17 +245,18 @@
       backdrop-filter: blur(14px);
       box-shadow: 0 12px 28px rgba(0,0,0,0.35);
       transition: transform 0.2s ease;
+      pointer-events: auto;
     }
     .preview-audio-toggle:active { transform: scale(0.92); }
     .preview-audio-toggle svg { width: 22px; height: 22px; fill: currentColor; }
 
     .thumbnail-button {
       position: absolute;
-      top: var(--preview-top-control-offset);
-      left: 50%;
-      width: 46px;
-      height: 46px;
-      border-radius: 12px;
+      bottom: 18px;
+      left: 18px;
+      width: 62px;
+      height: 62px;
+      border-radius: 14px;
       border: 1px solid rgba(255,255,255,0.25);
       background: rgba(20,20,20,0.7);
       background-size: cover;
@@ -269,7 +266,6 @@
       z-index: 8;
       display: grid;
       place-items: center;
-      transform: translateX(-50%);
     }
 
     .thumbnail-preview-wrap {
@@ -278,7 +274,7 @@
       justify-content: center;
     }
     .thumbnail-preview {
-      width: min(240px, 70vw);
+      width: min(190px, 58vw);
       aspect-ratio: 9 / 16;
       border-radius: 16px;
       border: 1px solid rgba(255,255,255,0.2);
@@ -297,39 +293,48 @@
 
     .thumbnail-strip {
       display: flex;
-      gap: 8px;
-      overflow-x: auto;
+      gap: 4px;
+      overflow-x: hidden;
       overflow-y: hidden;
-      padding-bottom: 4px;
-      scroll-snap-type: x mandatory;
-      touch-action: pan-x;
+      padding: 6px;
+      touch-action: none;
       overscroll-behavior: contain;
+      flex-wrap: nowrap;
+      align-items: center;
+      height: 86px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.12);
+      scrollbar-width: none;
+      -ms-overflow-style: none;
     }
+    .thumbnail-strip::-webkit-scrollbar { display: none; }
     .thumbnail-frame {
-      width: 90px;
-      height: 140px;
-      border-radius: 12px;
+      width: 52px;
+      height: 78px;
+      border-radius: 10px;
       border: 1px solid rgba(255,255,255,0.18);
       background: rgba(255,255,255,0.08);
       background-size: cover;
       background-position: center;
       flex: 0 0 auto;
-      scroll-snap-align: center;
-      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
       position: relative;
+      opacity: 0.35;
     }
     .thumbnail-frame.active {
-      transform: scale(1.08);
+      transform: scale(1.22);
       border-color: rgba(255,255,255,0.9);
       box-shadow: 0 12px 24px rgba(0,0,0,0.35);
+      opacity: 1;
     }
     .thumbnail-frame .time-chip {
       position: absolute;
-      bottom: 6px;
+      bottom: 4px;
       left: 50%;
       transform: translateX(-50%);
-      font-size: 11px;
-      padding: 4px 8px;
+      font-size: 10px;
+      padding: 3px 6px;
       border-radius: 999px;
       background: rgba(0,0,0,0.6);
       color: #fff;
@@ -1097,11 +1102,10 @@
     const THUMBNAIL_IMMEDIATE_TIMES = [0.3, 1];
     const THUMBNAIL_MIN_STEP = 0.8;
     const THUMBNAIL_MAX_STEP = 1;
-    const THUMBNAIL_MAX_FRAMES = 18;
+    const THUMBNAIL_MAX_FRAMES = 8;
     const THUMBNAIL_TIME_TOLERANCE = 0.08;
     let thumbnailGenerationId = 0;
     let isThumbnailScrubbing = false;
-    let thumbnailStripScrollRaf = null;
     let lastPreviewSeek = 0;
 
     function getThumbnailFrameTimes(durationSeconds) {
@@ -1238,36 +1242,33 @@
         if (!thumbnailStrip) return null;
         const items = thumbnailStrip.querySelectorAll('.thumbnail-frame');
         if (!items.length) return null;
-        const targetX = Number.isFinite(clientX) ? clientX : thumbnailStrip.getBoundingClientRect().left + thumbnailStrip.clientWidth / 2;
-        let closestTime = null;
-        let closestDistance = Number.POSITIVE_INFINITY;
-        items.forEach((item) => {
-            const rect = item.getBoundingClientRect();
-            const center = rect.left + rect.width / 2;
-            const distance = Math.abs(center - targetX);
-            if (distance < closestDistance) {
-                closestDistance = distance;
-                closestTime = Number(item.dataset.time || 0);
-            }
-        });
-        return closestTime;
+        const rect = thumbnailStrip.getBoundingClientRect();
+        const safeX = Number.isFinite(clientX) ? clientX : rect.left + rect.width / 2;
+        const progress = Math.min(1, Math.max(0, (safeX - rect.left) / rect.width));
+        const duration = Math.max(videoDurationSeconds || 0, previewVideo?.duration || 0);
+        if (!duration) {
+            const fallbackTarget = rect.left + rect.width * progress;
+            let closestTime = null;
+            let closestDistance = Number.POSITIVE_INFINITY;
+            items.forEach((item) => {
+                const itemRect = item.getBoundingClientRect();
+                const center = itemRect.left + itemRect.width / 2;
+                const distance = Math.abs(center - fallbackTarget);
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestTime = Number(item.dataset.time || 0);
+                }
+            });
+            return closestTime;
+        }
+        return duration * progress;
     }
 
     function handleThumbnailScrub(clientX) {
         const time = getClosestThumbnailTimeByX(clientX);
         if (!Number.isFinite(time)) return;
-        setSelectedThumbnail(time, { seekPreview: true });
-    }
-
-    function handleThumbnailStripScroll() {
-        if (!thumbnailStrip) return;
-        if (thumbnailStripScrollRaf) return;
-        thumbnailStripScrollRaf = requestAnimationFrame(() => {
-            thumbnailStripScrollRaf = null;
-            handleThumbnailScrub(
-                thumbnailStrip.getBoundingClientRect().left + thumbnailStrip.clientWidth / 2,
-            );
-        });
+        const snapped = selectNearestThumbnailFrame(time)?.time ?? time;
+        setSelectedThumbnail(snapped, { seekPreview: true });
     }
 
     function safeSeekPreview(timeSeconds) {
@@ -1951,12 +1952,14 @@
 
     if (thumbnailStrip) {
         thumbnailStrip.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
             isThumbnailScrubbing = true;
             thumbnailStrip.setPointerCapture?.(e.pointerId);
             handleThumbnailScrub(e.clientX);
         });
         thumbnailStrip.addEventListener('pointermove', (e) => {
             if (!isThumbnailScrubbing) return;
+            e.preventDefault();
             handleThumbnailScrub(e.clientX);
         });
         const endThumbnailScrub = (e) => {
@@ -1966,7 +1969,6 @@
         };
         thumbnailStrip.addEventListener('pointerup', endThumbnailScrub);
         thumbnailStrip.addEventListener('pointercancel', endThumbnailScrub);
-        thumbnailStrip.addEventListener('scroll', handleThumbnailStripScroll, { passive: true });
     }
 
     function setActiveTab(tabKey = 'music') {
