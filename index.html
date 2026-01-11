@@ -1119,12 +1119,6 @@
     let thumbnailGenerationId = 0;
     let isThumbnailScrubbing = false;
     let lastPreviewSeek = 0;
-    const thumbnailScrubAudioState = {
-        active: false,
-        previewMuted: null,
-        previewVolume: null,
-    };
-
     function getThumbnailFrameTimes(durationSeconds) {
         const duration = Math.max(0.1, Number(durationSeconds) || 0.1);
         const step = Math.max(THUMBNAIL_MIN_STEP, Math.min(THUMBNAIL_MAX_STEP, duration / (THUMBNAIL_MAX_FRAMES - 1)));
@@ -1296,39 +1290,8 @@
         const time = getClosestThumbnailTimeByX(clientX);
         if (!Number.isFinite(time)) return;
         const snapped = selectNearestThumbnailFrame(time)?.time ?? time;
-        setSelectedThumbnail(snapped, { seekPreview: true });
-    }
-
-    function suppressPreviewAudioDuringScrub() {
-        if (thumbnailScrubAudioState.active) return;
-        thumbnailScrubAudioState.active = true;
-        if (previewVideo) {
-            thumbnailScrubAudioState.previewMuted = previewVideo.muted;
-            thumbnailScrubAudioState.previewVolume = previewVideo.volume;
-            previewVideo.muted = true;
-            previewVideo.volume = 0;
-        }
-        if (musicEngine) {
-            musicEngine.updateVolume(0);
-        }
-    }
-
-    function restorePreviewAudioAfterScrub() {
-        if (!thumbnailScrubAudioState.active) return;
-        thumbnailScrubAudioState.active = false;
-        if (previewVideo) {
-            if (typeof thumbnailScrubAudioState.previewMuted === 'boolean') {
-                previewVideo.muted = thumbnailScrubAudioState.previewMuted;
-            }
-            if (typeof thumbnailScrubAudioState.previewVolume === 'number') {
-                previewVideo.volume = thumbnailScrubAudioState.previewVolume;
-            }
-        }
-        thumbnailScrubAudioState.previewMuted = null;
-        thumbnailScrubAudioState.previewVolume = null;
-        if (musicEngine) {
-            musicEngine.updateVolume(musicVolume);
-        }
+        // UI scrub: met à jour la sélection sans seek vidéo pendant le drag.
+        setSelectedThumbnail(snapped, { seekPreview: false });
     }
 
     function safeSeekPreview(timeSeconds) {
@@ -2029,7 +1992,7 @@
         thumbnailStrip.addEventListener('pointerdown', (e) => {
             e.preventDefault();
             isThumbnailScrubbing = true;
-            suppressPreviewAudioDuringScrub();
+            // La timelapse est un picker UI passif : aucune action audio/vidéo.
             thumbnailStrip.setPointerCapture?.(e.pointerId);
             handleThumbnailScrub(e.clientX);
         });
@@ -2042,7 +2005,7 @@
             if (!isThumbnailScrubbing) return;
             isThumbnailScrubbing = false;
             thumbnailStrip.releasePointerCapture?.(e.pointerId);
-            restorePreviewAudioAfterScrub();
+            // La timelapse n'affecte jamais la vidéo, elle sert uniquement au choix de la minia.
         };
         thumbnailStrip.addEventListener('pointerup', endThumbnailScrub);
         thumbnailStrip.addEventListener('pointercancel', endThumbnailScrub);
