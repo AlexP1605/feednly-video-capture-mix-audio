@@ -295,18 +295,21 @@
       display: flex;
       gap: 4px;
       overflow-x: hidden;
-      overflow-y: hidden;
-      padding: 6px;
+      overflow-y: visible; /* Fix: évite le clipping vertical de la frame active */
+      padding: 10px 8px; /* Fix: réserve l'espace pour l'agrandissement sans sauts */
       touch-action: none;
       overscroll-behavior: contain;
       flex-wrap: nowrap;
       align-items: center;
-      height: 86px;
+      height: 104px; /* Fix: hauteur suffisante pour la miniature active */
       background: rgba(255,255,255,0.05);
       border-radius: 16px;
       border: 1px solid rgba(255,255,255,0.12);
       scrollbar-width: none;
       -ms-overflow-style: none;
+      width: 100%;
+      max-width: calc(100vw - 36px); /* Fix: ne jamais dépasser la largeur du téléphone */
+      margin: 0 auto; /* Fix: recentre la bande dans la feuille */
     }
     .thumbnail-strip::-webkit-scrollbar { display: none; }
     .thumbnail-frame {
@@ -323,8 +326,8 @@
       opacity: 0.35;
     }
     .thumbnail-frame.active {
-      transform: scale(1.22);
-      border-color: rgba(255,255,255,0.9);
+      transform: scale(1.12); /* Fix: zoom plus doux pour la miniature active */
+      border-color: transparent; /* Fix: supprime le contour actif */
       box-shadow: 0 12px 24px rgba(0,0,0,0.35);
       opacity: 1;
     }
@@ -1213,9 +1216,30 @@
 
     function renderThumbnailStrip(frames) {
         if (!thumbnailStrip) return;
+        if (!frames.length) {
+            thumbnailStrip.innerHTML = '';
+            return;
+        }
+        const existingItems = [...thumbnailStrip.querySelectorAll('.thumbnail-frame')];
+        const layoutMatches = existingItems.length === frames.length
+            && existingItems.every((item, index) => {
+                const itemTime = Number(item.dataset.time || 0);
+                return Math.abs(itemTime - frames[index].time) <= THUMBNAIL_TIME_TOLERANCE;
+            });
+        if (layoutMatches) {
+            // UX: évite les reflows en mettant à jour uniquement les images
+            frames.forEach((frame, index) => {
+                const button = existingItems[index];
+                if (!button) return;
+                button.style.backgroundImage = frame.url ? `url(${frame.url})` : '';
+                const chip = button.querySelector('.time-chip');
+                if (chip) chip.textContent = formatTimeLabel(frame.time);
+            });
+            setSelectedThumbnail(selectedThumbnailTime);
+            return;
+        }
         const previousScrollLeft = thumbnailStrip.scrollLeft;
         thumbnailStrip.innerHTML = '';
-        if (!frames.length) return;
         const fragment = document.createDocumentFragment();
         frames.forEach((frame) => {
             const button = document.createElement('button');
@@ -1346,13 +1370,25 @@
 
             const pushFrame = (frame) => {
                 if (!frame) return;
-                frames = [...frames, frame]
-                    .sort((a, b) => a.time - b.time);
+                const index = frames.findIndex(
+                    item => Math.abs(item.time - frame.time) <= THUMBNAIL_TIME_TOLERANCE
+                );
+                if (index >= 0) {
+                    frames = frames.map((item, idx) => (idx === index ? frame : item));
+                } else {
+                    frames = [...frames, frame].sort((a, b) => a.time - b.time);
+                }
                 thumbnailFrames = frames;
                 scheduleThumbnailRender();
             };
 
             const times = buildThumbnailTimeList(duration);
+            // UX: réserver toute la bande pour éviter les sauts visuels pendant le chargement
+            frames = times.map(time => ({ time, url: '' }));
+            thumbnailFrames = frames;
+            if (thumbnailSheet?.classList.contains('active')) {
+                renderThumbnailStrip(frames);
+            }
             const immediateTimes = getImmediateThumbnailTimes(duration);
             const remainingTimes = times.filter(
                 time => !immediateTimes.some(immediate => Math.abs(immediate - time) < THUMBNAIL_TIME_TOLERANCE),
