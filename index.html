@@ -16,7 +16,23 @@
       --preview-top-control-offset: calc(env(safe-area-inset-top) - 4px);
     }
 
-    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-touch-callout: none; }
+    /* Désactivation globale de la sélection native pour un comportement "app-like". */
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    /* Exception explicite : les champs de saisie doivent rester sélectionnables. */
+    input,
+    textarea,
+    select {
+      user-select: auto;
+      -webkit-user-select: auto;
+      -webkit-touch-callout: default;
+    }
 
     html { width: 100%; height: 100%; background: #000; overflow: hidden; }
 
@@ -1255,25 +1271,20 @@
         const items = thumbnailStrip.querySelectorAll('.thumbnail-frame');
         if (!items.length) return null;
         const rect = thumbnailStrip.getBoundingClientRect();
-        const safeX = Number.isFinite(clientX) ? clientX : rect.left + rect.width / 2;
-        const progress = Math.min(1, Math.max(0, (safeX - rect.left) / rect.width));
-        const duration = Math.max(videoDurationSeconds || 0, previewVideo?.duration || 0);
-        if (!duration) {
-            const fallbackTarget = rect.left + rect.width * progress;
-            let closestTime = null;
-            let closestDistance = Number.POSITIVE_INFINITY;
-            items.forEach((item) => {
-                const itemRect = item.getBoundingClientRect();
-                const center = itemRect.left + itemRect.width / 2;
-                const distance = Math.abs(center - fallbackTarget);
-                if (distance < closestDistance) {
-                    closestDistance = distance;
-                    closestTime = Number(item.dataset.time || 0);
-                }
-            });
-            return closestTime;
-        }
-        return duration * progress;
+        const targetX = Number.isFinite(clientX) ? clientX : rect.left + rect.width / 2;
+        // Calcule la frame la plus proche visuellement (centre des miniatures).
+        let closestTime = null;
+        let closestDistance = Number.POSITIVE_INFINITY;
+        items.forEach((item) => {
+            const itemRect = item.getBoundingClientRect();
+            const center = itemRect.left + itemRect.width / 2;
+            const distance = Math.abs(center - targetX);
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestTime = Number(item.dataset.time || 0);
+            }
+        });
+        return closestTime;
     }
 
     function handleThumbnailScrub(clientX) {
