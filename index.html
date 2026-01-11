@@ -216,7 +216,9 @@
     .music-title { font-weight: 800; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
     .music-artist, .music-duration { display: none; }
     .music-visual { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-width: 0; }
-    .music-overlay.empty .music-visual { width: 100%; justify-content: center; }
+    .music-overlay.empty .music-visual { width: auto; justify-content: center; }
+    .music-overlay.empty .music-meta { flex: 1; min-width: 0; text-align: center; }
+    .music-overlay.empty .music-title { max-width: none; }
     .music-icon { width: 22px; height: 22px; fill: #fff; flex-shrink: 0; display: block; }
 
     .music-clear {
@@ -293,28 +295,31 @@
 
     .thumbnail-strip {
       display: flex;
-      gap: 4px;
+      --thumb-count: 8;
+      --thumb-gap: 2px;
+      gap: var(--thumb-gap);
       overflow-x: hidden;
       overflow-y: visible; /* Fix: évite le clipping vertical de la frame active */
-      padding: 10px 8px; /* Fix: réserve l'espace pour l'agrandissement sans sauts */
+      padding: 0; /* Fix: réserve l'espace pour l'agrandissement sans sauts */
       touch-action: none;
       overscroll-behavior: contain;
       flex-wrap: nowrap;
       align-items: center;
-      height: 104px; /* Fix: hauteur suffisante pour la miniature active */
+      height: 82px; /* Fix: hauteur suffisante pour la miniature active */
       background: rgba(255,255,255,0.05);
       border-radius: 16px;
       border: 1px solid rgba(255,255,255,0.12);
       scrollbar-width: none;
       -ms-overflow-style: none;
       width: 100%;
-      max-width: calc(100vw - 36px); /* Fix: ne jamais dépasser la largeur du téléphone */
+      max-width: 100vw; /* Fix: ne jamais dépasser la largeur du téléphone */
       margin: 0 auto; /* Fix: recentre la bande dans la feuille */
     }
     .thumbnail-strip::-webkit-scrollbar { display: none; }
     .thumbnail-frame {
-      width: 52px;
-      height: 78px;
+      width: calc((100% - (var(--thumb-count) - 1) * var(--thumb-gap)) / var(--thumb-count));
+      aspect-ratio: 9 / 16;
+      height: auto;
       border-radius: 10px;
       border: 1px solid rgba(255,255,255,0.18);
       background: rgba(255,255,255,0.08);
@@ -330,18 +335,6 @@
       border-color: transparent; /* Fix: supprime le contour actif */
       box-shadow: 0 12px 24px rgba(0,0,0,0.35);
       opacity: 1;
-    }
-    .thumbnail-frame .time-chip {
-      position: absolute;
-      bottom: 4px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 10px;
-      padding: 3px 6px;
-      border-radius: 999px;
-      background: rgba(0,0,0,0.6);
-      color: #fff;
-      font-weight: 700;
     }
     .thumbnail-loading {
       font-size: 13px;
@@ -1216,6 +1209,7 @@
 
     function renderThumbnailStrip(frames) {
         if (!thumbnailStrip) return;
+        thumbnailStrip.style.setProperty('--thumb-count', String(Math.max(frames.length, 1)));
         if (!frames.length) {
             thumbnailStrip.innerHTML = '';
             return;
@@ -1232,8 +1226,6 @@
                 const button = existingItems[index];
                 if (!button) return;
                 button.style.backgroundImage = frame.url ? `url(${frame.url})` : '';
-                const chip = button.querySelector('.time-chip');
-                if (chip) chip.textContent = formatTimeLabel(frame.time);
             });
             setSelectedThumbnail(selectedThumbnailTime);
             return;
@@ -1247,10 +1239,6 @@
             button.className = 'thumbnail-frame';
             button.dataset.time = String(frame.time);
             button.style.backgroundImage = frame.url ? `url(${frame.url})` : '';
-            const chip = document.createElement('span');
-            chip.className = 'time-chip';
-            chip.textContent = formatTimeLabel(frame.time);
-            button.appendChild(chip);
             button.onclick = (e) => {
                 e.stopPropagation();
                 setSelectedThumbnail(frame.time, { seekPreview: true });
@@ -1325,6 +1313,9 @@
             tempVideo.preload = 'auto';
             const objectUrl = URL.createObjectURL(videoBlob);
             tempVideo.src = objectUrl;
+            tempVideo.playsInline = true;
+            tempVideo.setAttribute('playsinline', '');
+            tempVideo.load();
 
             await new Promise((resolve, reject) => {
                 tempVideo.onloadedmetadata = () => resolve();
@@ -2931,6 +2922,7 @@
        recordedBlob = file;
        shouldCheckDuration = true;
        showPreview(file);
+       extractThumbnailFrames(file);
        e.target.value = '';
     }
 
